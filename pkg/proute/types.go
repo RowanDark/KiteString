@@ -102,6 +102,7 @@ type ScanResult struct {
 	ContentLength int
 	ResponseTime  time.Duration
 	Timestamp     time.Time
+	URL           string
 	KSUID         string
 }
 
@@ -154,4 +155,10 @@ type ScanConfig struct {
 	WildcardDetection  bool
 	QuarantineThresh   int
 	OutputFormat       string
+	DisablePreflight   bool
+	PreflightDepth     int
+	FilterAPIKSUID     string
+	ForceMethod        string
+	BlacklistDomains   []string
+	FullScan           bool
 }

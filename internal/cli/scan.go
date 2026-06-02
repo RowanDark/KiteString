@@ -1,9 +1,15 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
+	"time"
 
+	"github.com/RowanDark/kitestring/internal/scan"
 	"github.com/RowanDark/kitestring/internal/wordlist"
+	"github.com/RowanDark/kitestring/pkg/proute"
 	"github.com/spf13/cobra"
 )
 
@@ -12,18 +18,40 @@ var scanCmd = &cobra.Command{
 	Short: "Context-aware API endpoint discovery",
 	Long: `Scan a target URL for API endpoints using context-aware analysis.
 
-KiteString inspects JavaScript bundles, OpenAPI specs, and response patterns
-to intelligently discover API routes rather than blindly fuzzing paths.
+KiteString sends routes with correct HTTP methods, headers, parameters, and
+body content derived from the wordlist schema — not blind path fuzzing.
 
-Example:
-  ks scan https://example.com
-  ks scan https://api.example.com/v1 --depth 3
-  ks scan https://api.example.com -A apiroutes
+Examples:
+  ks scan https://example.com -w routes.txt
+  ks scan https://api.example.com/v1 -A apiroutes
   ks scan https://api.example.com -A apiroutes:20000
   ks scan https://api.example.com --openapi-url https://api.example.com/openapi.json
-  ks scan https://api.example.com --openapi-file ./local-spec.yaml`,
+  ks scan - -w routes.txt   # read target URL from stdin`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// --- Target ---
+		var targetStr string
+		if len(args) > 0 && args[0] != "-" {
+			targetStr = args[0]
+		} else {
+			sc := bufio.NewScanner(os.Stdin)
+			if sc.Scan() {
+				targetStr = strings.TrimSpace(sc.Text())
+			}
+			if err := sc.Err(); err != nil {
+				return fmt.Errorf("reading stdin: %w", err)
+			}
+		}
+		if targetStr == "" {
+			return fmt.Errorf("target URL required: pass as argument or pipe to stdin with -")
+		}
+
+		targets, err := proute.ParseTarget(targetStr)
+		if err != nil {
+			return fmt.Errorf("invalid target: %w", err)
+		}
+
+		// --- Wordlist loading ---
 		aliases, _ := cmd.Flags().GetStringArray("wordlist-alias")
 		wordlistFiles, _ := cmd.Flags().GetStringArray("wordlist")
 		headN, _ := cmd.Flags().GetInt("head")
@@ -31,71 +59,195 @@ Example:
 		openapiURL, _ := cmd.Flags().GetString("openapi-url")
 		openapiFile, _ := cmd.Flags().GetString("openapi-file")
 
-		// Resolve any alias specs (e.g. "apiroutes" or "apiroutes:20000")
-		// and append the resulting file paths to wordlistFiles.
 		for _, spec := range aliases {
-			path, limit, err := wordlist.ResolveAlias(spec)
-			if err != nil {
-				return err
+			path, limit, resolveErr := wordlist.ResolveAlias(spec)
+			if resolveErr != nil {
+				return resolveErr
 			}
 			wordlistFiles = append(wordlistFiles, path)
-			// Per-alias head limit overrides --head when non-zero.
 			if limit > 0 && headN == 0 {
 				headN = limit
 			}
 		}
 
-		// Resolve --seclists alias, fetching and caching on demand.
 		if seclistsAlias != "" {
-			path, err := wordlist.ResolveSecList(seclistsAlias)
-			if err != nil {
-				return err
+			path, resolveErr := wordlist.ResolveSecList(seclistsAlias)
+			if resolveErr != nil {
+				return resolveErr
 			}
 			wordlistFiles = append(wordlistFiles, path)
 		}
 
-		// Fetch OpenAPI spec at scan time (no caching).
-		if openapiURL != "" {
-			fmt.Printf("Fetching OpenAPI spec from %s ...\n", openapiURL)
-			routes, err := wordlist.FetchFromURL(openapiURL)
-			if err != nil {
-				return fmt.Errorf("openapi-url: %w", err)
+		var allRoutes []proute.Route
+
+		if len(wordlistFiles) > 0 {
+			var loaded []proute.Route
+			if headN > 0 {
+				loaded, err = wordlist.Head(wordlistFiles, headN)
+			} else {
+				loaded, err = wordlist.Load(wordlistFiles)
 			}
-			fmt.Printf("  Loaded %d routes from spec\n", len(routes))
-			_ = routes // routes will feed into the scanner once implemented
+			if err != nil {
+				return err
+			}
+			allRoutes = append(allRoutes, loaded...)
+		}
+
+		if openapiURL != "" {
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Fetching OpenAPI spec from %s ...\n", openapiURL)
+			}
+			routes, fetchErr := wordlist.FetchFromURL(openapiURL)
+			if fetchErr != nil {
+				return fmt.Errorf("openapi-url: %w", fetchErr)
+			}
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "  Loaded %d routes from spec\n", len(routes))
+			}
+			allRoutes = append(allRoutes, routes...)
 		}
 
 		if openapiFile != "" {
-			fmt.Printf("Loading OpenAPI spec from %s ...\n", openapiFile)
-			routes, err := wordlist.FetchFromFile(openapiFile)
-			if err != nil {
-				return fmt.Errorf("openapi-file: %w", err)
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Loading OpenAPI spec from %s ...\n", openapiFile)
 			}
-			fmt.Printf("  Loaded %d routes from spec\n", len(routes))
-			_ = routes // routes will feed into the scanner once implemented
+			routes, fetchErr := wordlist.FetchFromFile(openapiFile)
+			if fetchErr != nil {
+				return fmt.Errorf("openapi-file: %w", fetchErr)
+			}
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "  Loaded %d routes from spec\n", len(routes))
+			}
+			allRoutes = append(allRoutes, routes...)
 		}
 
-		_ = wordlistFiles
-		_ = headN
+		if len(allRoutes) == 0 {
+			return fmt.Errorf("no routes loaded: specify -w, -A, -S, or --openapi-url/--openapi-file")
+		}
 
-		fmt.Println("ks scan: not yet implemented")
+		// --- Build scan config ---
+		config, buildErr := buildScanConfig(cmd)
+		if buildErr != nil {
+			return buildErr
+		}
+
+		// --- Run ---
+		s, err := scan.New(config)
+		if err != nil {
+			return err
+		}
+
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "Scanning %d target(s) with %d routes...\n",
+				len(targets), len(allRoutes))
+		}
+
+		if err := s.Run(targets, allRoutes); err != nil {
+			return err
+		}
+
+		if !quiet {
+			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", s.ResultCount())
+		}
+
 		return nil
 	},
 }
 
+func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
+	threads, _ := cmd.Flags().GetInt("threads")
+	parallelHosts, _ := cmd.Flags().GetInt("parallel-hosts")
+	timeoutSec, _ := cmd.Flags().GetInt("timeout")
+	delayMs, _ := cmd.Flags().GetFloat64("delay")
+	failCodes, _ := cmd.Flags().GetIntSlice("fail-status-codes")
+	successCodes, _ := cmd.Flags().GetIntSlice("success-status-codes")
+	ignoreLengthStrs, _ := cmd.Flags().GetStringArray("ignore-length")
+	headerStrs, _ := cmd.Flags().GetStringArray("header")
+	userAgent, _ := cmd.Flags().GetString("user-agent")
+	followRedirects, _ := cmd.Flags().GetBool("follow-redirects")
+	maxRedirects, _ := cmd.Flags().GetInt("max-redirects")
+	disablePreflight, _ := cmd.Flags().GetBool("disable-precheck")
+	preflightDepth, _ := cmd.Flags().GetInt("preflight-depth")
+	quarantineThresh, _ := cmd.Flags().GetInt("quarantine-threshold")
+	wildcardDetection, _ := cmd.Flags().GetBool("wildcard-detection")
+	filterAPI, _ := cmd.Flags().GetString("filter-api")
+	forceMethod, _ := cmd.Flags().GetString("force-method")
+	blacklistDomains, _ := cmd.Flags().GetStringArray("blacklist-domain")
+
+	if !followRedirects {
+		maxRedirects = 0
+	}
+
+	var ignoreLengths []proute.LengthRange
+	for _, s := range ignoreLengthStrs {
+		lr, err := proute.ParseLengthRange(s)
+		if err != nil {
+			return proute.ScanConfig{}, fmt.Errorf("--ignore-length %q: %w", s, err)
+		}
+		ignoreLengths = append(ignoreLengths, lr)
+	}
+
+	return proute.ScanConfig{
+		MaxConnPerHost:     threads,
+		MaxParallelHosts:   parallelHosts,
+		Timeout:            time.Duration(timeoutSec) * time.Second,
+		Delay:              time.Duration(delayMs * float64(time.Second)),
+		FailStatusCodes:    failCodes,
+		SuccessStatusCodes: successCodes,
+		IgnoreLengths:      ignoreLengths,
+		Headers:            headerStrs,
+		UserAgent:          userAgent,
+		MaxRedirects:       maxRedirects,
+		WildcardDetection:  wildcardDetection,
+		QuarantineThresh:   quarantineThresh,
+		OutputFormat:       output, // package-level var bound to -o/--output in root.go
+		DisablePreflight:   disablePreflight,
+		PreflightDepth:     preflightDepth,
+		FilterAPIKSUID:     filterAPI,
+		ForceMethod:        forceMethod,
+		BlacklistDomains:   blacklistDomains,
+	}, nil
+}
+
 func init() {
-	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
-	scanCmd.Flags().StringArrayP("wordlist", "w", nil, "wordlist file(s) to use (.ks, .txt, or .json); repeatable")
-	scanCmd.Flags().StringArrayP("wordlist-alias", "A", nil, "cached wordlist alias, e.g. apiroutes or apiroutes:20000; repeatable")
+	// Wordlist & source flags
+	scanCmd.Flags().StringArrayP("wordlist", "w", nil, "wordlist file(s) (.ks, .txt, or .json); repeatable")
+	scanCmd.Flags().StringArrayP("wordlist-alias", "A", nil, "cached wordlist alias (e.g. apiroutes or apiroutes:20000); repeatable")
 	scanCmd.Flags().Int("head", 0, "use only the first N routes from each wordlist (0 = all)")
+	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand (e.g. api-endpoints)")
+	scanCmd.Flags().String("openapi-url", "", "fetch OpenAPI/Swagger spec from URL at scan time")
+	scanCmd.Flags().String("openapi-file", "", "load local OpenAPI/Swagger spec file at scan time")
+
+	// Connection & timing flags
+	scanCmd.Flags().IntP("threads", "t", 10, "concurrent connections per host")
+	scanCmd.Flags().IntP("parallel-hosts", "j", 10, "maximum number of hosts to scan concurrently")
+	scanCmd.Flags().Int("timeout", 10, "request timeout in seconds")
+	scanCmd.Flags().Float64("delay", 0, "delay between requests to same host in seconds")
 	scanCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
-	scanCmd.Flags().IntP("threads", "t", 10, "number of concurrent threads")
+
+	// Filter flags
+	scanCmd.Flags().IntSlice("fail-status-codes", nil, "status codes to suppress (e.g. 404,403); comma-separated")
+	scanCmd.Flags().IntSlice("success-status-codes", nil, "only report these status codes; comma-separated")
+	scanCmd.Flags().StringArray("ignore-length", nil, "suppress responses at this content length or range (e.g. 1234 or 100-200); repeatable")
+
+	// Request flags
+	scanCmd.Flags().StringArrayP("header", "H", nil, "extra request header 'Key: Value'; repeatable")
+	scanCmd.Flags().String("user-agent", "KiteString/1.0", "custom User-Agent string")
 	scanCmd.Flags().BoolP("follow-redirects", "r", true, "follow HTTP redirects")
-	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand and use as wordlist (e.g. api-endpoints)")
-	scanCmd.Flags().String("openapi-url", "", "fetch and use an OpenAPI/Swagger spec from URL at scan time (no caching)")
-	scanCmd.Flags().String("openapi-file", "", "load and use a local OpenAPI/Swagger spec file at scan time")
+	scanCmd.Flags().Int("max-redirects", 3, "maximum redirects to follow (when --follow-redirects is true)")
+	scanCmd.Flags().StringArray("blacklist-domain", nil, "do not follow redirects to these domains; repeatable")
+	scanCmd.Flags().String("force-method", "", "override HTTP method for all routes")
+
+	// Preflight & wildcard flags
 	scanCmd.Flags().Bool("disable-precheck", false, "skip preflight host check and wildcard baseline building")
-	scanCmd.Flags().Bool("kitebuilder-full-scan", false, "skip phase scanning, send all routes regardless of baseline")
-	scanCmd.Flags().Int("preflight-depth", 1, "directory depth for wildcard baseline probing")
-	scanCmd.Flags().Int("quarantine-threshold", 10, "consecutive wildcard responses before a host is quarantined")
+	scanCmd.Flags().Int("preflight-depth", 1, "path depth for wildcard baseline probing")
+	scanCmd.Flags().Int("quarantine-threshold", 10, "consecutive wildcard responses before host quarantine")
+	scanCmd.Flags().Bool("wildcard-detection", true, "detect and quarantine wildcard routing hosts")
+	scanCmd.Flags().Bool("kitebuilder-full-scan", false, "send all routes regardless of wildcard baseline")
+
+	// API-mode flags
+	scanCmd.Flags().String("filter-api", "", "only scan routes matching this KSUID")
+
+	// Misc
+	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
 }
