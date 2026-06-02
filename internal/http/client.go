@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	nethttp "net/http"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type ClientConfig struct {
 	UserAgent           string
 	MaxRedirects        int
 	ExtraHeaders        map[string]string
+	BlacklistDomains    []string // do not follow redirects to these domains
 }
 
 // Client wraps net/http.Client with KiteString-specific defaults.
@@ -44,6 +46,7 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 
 	maxRedir := cfg.MaxRedirects
+	blacklist := cfg.BlacklistDomains
 	inner := &nethttp.Client{
 		Transport: transport,
 		Timeout:   cfg.Timeout,
@@ -53,6 +56,12 @@ func NewClient(cfg ClientConfig) *Client {
 			}
 			if len(via) >= maxRedir {
 				return nethttp.ErrUseLastResponse
+			}
+			hostname := req.URL.Hostname()
+			for _, domain := range blacklist {
+				if hostname == domain || strings.HasSuffix(hostname, "."+domain) {
+					return nethttp.ErrUseLastResponse
+				}
 			}
 			return nil
 		},
