@@ -140,8 +140,16 @@ func (lr LengthRange) Contains(n int) bool {
 	return n >= lr.Min && n <= lr.Max
 }
 
+// ScopeChecker determines whether a given target is within scan scope.
+// A nil ScopeChecker means all targets are in scope.
+type ScopeChecker interface {
+	IsInScope(target string) bool
+	IsOutOfScope(target string) bool
+}
+
 // ScanConfig holds all runtime scan parameters.
 type ScanConfig struct {
+	Scope ScopeChecker // optional scope filter; nil means all targets are in scope
 	MaxConnPerHost       int
 	MaxParallelHosts     int
 	Timeout              time.Duration
