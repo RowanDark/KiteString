@@ -142,26 +142,30 @@ func (lr LengthRange) Contains(n int) bool {
 
 // ScanConfig holds all runtime scan parameters.
 type ScanConfig struct {
-	MaxConnPerHost      int
-	MaxParallelHosts    int
-	Timeout             time.Duration
-	Delay               time.Duration
-	FailStatusCodes     []int
-	SuccessStatusCodes  []int
-	IgnoreLengths       []LengthRange
-	Headers             []string
-	UserAgent           string
-	MaxRedirects        int
-	WildcardDetection   bool
-	QuarantineThresh    int
-	OutputFormat        string
-	DisablePreflight    bool
-	PreflightDepth      int
-	FilterAPIKSUID      string
-	ForceMethod         string
-	BlacklistDomains    []string
-	FullScan            bool
-	SimilarityThreshold float64
-	DisableSimilarity   bool
-	Verbose             string
+	MaxConnPerHost       int
+	MaxParallelHosts     int
+	Timeout              time.Duration
+	Delay                time.Duration
+	MaxRetries           int
+	BackoffBase          time.Duration
+	BackoffMax           time.Duration
+	UnreachableThreshold int
+	FailStatusCodes      []int
+	SuccessStatusCodes   []int
+	IgnoreLengths        []LengthRange
+	Headers              []string
+	UserAgent            string
+	MaxRedirects         int
+	WildcardDetection    bool
+	QuarantineThresh     int
+	OutputFormat         string
+	DisablePreflight     bool
+	PreflightDepth       int
+	FilterAPIKSUID       string
+	ForceMethod          string
+	BlacklistDomains     []string
+	FullScan             bool
+	SimilarityThreshold  float64
+	DisableSimilarity    bool
+	Verbose              string
 }

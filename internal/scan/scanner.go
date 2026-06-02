@@ -50,10 +50,13 @@ func New(config proute.ScanConfig) (*Scanner, error) {
 		BlacklistDomains:    config.BlacklistDomains,
 	})
 
-	var limiter *kshttp.RateLimiter
-	if config.Delay > 0 {
-		limiter = kshttp.NewRateLimiter(kshttp.RateLimiterConfig{Delay: config.Delay})
-	}
+	limiter := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		Delay:                config.Delay,
+		MaxRetries:           config.MaxRetries,
+		BaseBackoff:          config.BackoffBase,
+		MaxBackoff:           config.BackoffMax,
+		UnreachableThreshold: config.UnreachableThreshold,
+	})
 
 	pool := kshttp.NewPool(kshttp.PoolConfig{
 		MaxConnPerHost:   config.MaxConnPerHost,

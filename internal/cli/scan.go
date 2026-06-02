@@ -158,7 +158,11 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 	threads, _ := cmd.Flags().GetInt("threads")
 	parallelHosts, _ := cmd.Flags().GetInt("parallel-hosts")
 	timeoutSec, _ := cmd.Flags().GetInt("timeout")
-	delayMs, _ := cmd.Flags().GetFloat64("delay")
+	delay, _ := cmd.Flags().GetDuration("delay")
+	maxRetries, _ := cmd.Flags().GetInt("max-retries")
+	backoffBase, _ := cmd.Flags().GetDuration("backoff-base")
+	backoffMax, _ := cmd.Flags().GetDuration("backoff-max")
+	unreachableThreshold, _ := cmd.Flags().GetInt("unreachable-threshold")
 	failCodes, _ := cmd.Flags().GetIntSlice("fail-status-codes")
 	successCodes, _ := cmd.Flags().GetIntSlice("success-status-codes")
 	ignoreLengthStrs, _ := cmd.Flags().GetStringArray("ignore-length")
@@ -190,27 +194,31 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 	}
 
 	return proute.ScanConfig{
-		MaxConnPerHost:      threads,
-		MaxParallelHosts:    parallelHosts,
-		Timeout:             time.Duration(timeoutSec) * time.Second,
-		Delay:               time.Duration(delayMs * float64(time.Second)),
-		FailStatusCodes:     failCodes,
-		SuccessStatusCodes:  successCodes,
-		IgnoreLengths:       ignoreLengths,
-		Headers:             headerStrs,
-		UserAgent:           userAgent,
-		MaxRedirects:        maxRedirects,
-		WildcardDetection:   wildcardDetection,
-		QuarantineThresh:    quarantineThresh,
-		OutputFormat:        output, // package-level var bound to -o/--output in root.go
-		DisablePreflight:    disablePreflight,
-		PreflightDepth:      preflightDepth,
-		FilterAPIKSUID:      filterAPI,
-		ForceMethod:         forceMethod,
-		BlacklistDomains:    blacklistDomains,
-		SimilarityThreshold: similarityThreshold,
-		DisableSimilarity:   disableSimilarity,
-		Verbose:             verbose, // package-level var bound to -v/--verbose in root.go
+		MaxConnPerHost:       threads,
+		MaxParallelHosts:     parallelHosts,
+		Timeout:              time.Duration(timeoutSec) * time.Second,
+		Delay:                delay,
+		MaxRetries:           maxRetries,
+		BackoffBase:          backoffBase,
+		BackoffMax:           backoffMax,
+		UnreachableThreshold: unreachableThreshold,
+		FailStatusCodes:      failCodes,
+		SuccessStatusCodes:   successCodes,
+		IgnoreLengths:        ignoreLengths,
+		Headers:              headerStrs,
+		UserAgent:            userAgent,
+		MaxRedirects:         maxRedirects,
+		WildcardDetection:    wildcardDetection,
+		QuarantineThresh:     quarantineThresh,
+		OutputFormat:         output, // package-level var bound to -o/--output in root.go
+		DisablePreflight:     disablePreflight,
+		PreflightDepth:       preflightDepth,
+		FilterAPIKSUID:       filterAPI,
+		ForceMethod:          forceMethod,
+		BlacklistDomains:     blacklistDomains,
+		SimilarityThreshold:  similarityThreshold,
+		DisableSimilarity:    disableSimilarity,
+		Verbose:              verbose, // package-level var bound to -v/--verbose in root.go
 	}, nil
 }
 
@@ -227,7 +235,11 @@ func init() {
 	scanCmd.Flags().IntP("threads", "t", 10, "concurrent connections per host")
 	scanCmd.Flags().IntP("parallel-hosts", "j", 10, "maximum number of hosts to scan concurrently")
 	scanCmd.Flags().Int("timeout", 10, "request timeout in seconds")
-	scanCmd.Flags().Float64("delay", 0, "delay between requests to same host in seconds")
+	scanCmd.Flags().Duration("delay", 0, "fixed inter-request delay per host (e.g. 200ms, 1s)")
+	scanCmd.Flags().Int("max-retries", 3, "maximum retries on 429 or connection failure")
+	scanCmd.Flags().Duration("backoff-base", 5*time.Second, "base duration for exponential backoff on 429")
+	scanCmd.Flags().Duration("backoff-max", 60*time.Second, "maximum backoff ceiling")
+	scanCmd.Flags().Int("unreachable-threshold", 5, "consecutive connection failures before marking a host unreachable")
 	scanCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
 
 	// Filter flags
