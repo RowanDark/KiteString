@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	ksout "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/scan"
 	"github.com/RowanDark/kitestring/internal/scope"
 	"github.com/RowanDark/kitestring/internal/wordlist"
@@ -174,6 +175,17 @@ Examples:
 			return err
 		}
 
+		reportFmt, _ := cmd.Flags().GetString("report")
+		var collector *ksout.CollectingWriter
+		if reportFmt != "" {
+			baseWriter, wErr := ksout.NewWriter(config.OutputFormat, nil)
+			if wErr != nil {
+				return wErr
+			}
+			collector = ksout.NewCollectingWriter(baseWriter)
+			s.SetWriter(collector)
+		}
+
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Scanning %d target(s) with %d routes...\n",
 				len(targets), len(allRoutes))
@@ -185,6 +197,23 @@ Examples:
 
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", s.ResultCount())
+		}
+
+		if reportFmt != "" && collector != nil {
+			meta := ksout.ReportMeta{
+				Target:    targetStr,
+				ScanDate:  time.Now(),
+				Wordlists: wordlistFiles,
+				KSVersion: Version,
+			}
+			report := ksout.BuildReport(collector.Results(), meta)
+			filename, wErr := writeAutoReport(report, reportFmt)
+			if wErr != nil {
+				return wErr
+			}
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Report written to %s\n", filename)
+			}
 		}
 
 		return nil
@@ -315,4 +344,5 @@ func init() {
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
+	scanCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, html (writes ks-report-<timestamp>.<ext>)")
 }

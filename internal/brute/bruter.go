@@ -154,6 +154,11 @@ func (b *Bruter) SetOutput(w io.Writer) {
 	b.out = mustWriter(b.config.OutputFormat, w)
 }
 
+// SetWriter replaces the bruter's output writer directly.
+func (b *Bruter) SetWriter(w output.Writer) {
+	b.out = w
+}
+
 func (b *Bruter) handleResult(result *kshttp.Result) {
 	if result.Err != nil {
 		return

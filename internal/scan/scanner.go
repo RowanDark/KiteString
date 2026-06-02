@@ -161,6 +161,11 @@ func (s *Scanner) SetOutput(w io.Writer) {
 	s.out = mustWriter(s.config.OutputFormat, w)
 }
 
+// SetWriter replaces the scanner's output writer directly.
+func (s *Scanner) SetWriter(w output.Writer) {
+	s.out = w
+}
+
 func (s *Scanner) handleResult(result *kshttp.Result) {
 	if result.Err != nil {
 		return
