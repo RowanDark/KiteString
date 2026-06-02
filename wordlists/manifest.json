@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "updated_at": "2026-01-01",
+  "wordlists": [
+    {
+      "alias": "apiroutes",
+      "filename": "apiroutes.ks",
+      "description": "Common API routes derived from OpenAPI/Swagger corpus",
+      "count": 215000,
+      "compressed_size_mb": 4.2,
+      "url": "https://github.com/RowanDark/kitestring/releases/download/wordlists-latest/apiroutes.ks"
+    },
+    {
+      "alias": "graphql",
+      "filename": "graphql.ks",
+      "description": "GraphQL introspection and common query paths",
+      "count": 50000,
+      "compressed_size_mb": 1.1,
+      "url": "https://github.com/RowanDark/kitestring/releases/download/wordlists-latest/graphql.ks"
+    },
+    {
+      "alias": "admin",
+      "filename": "admin.ks",
+      "description": "Administrative interface paths and API management routes",
+      "count": 25000,
+      "compressed_size_mb": 0.5,
+      "url": "https://github.com/RowanDark/kitestring/releases/download/wordlists-latest/admin.ks"
+    },
+    {
+      "alias": "cloud",
+      "filename": "cloud.ks",
+      "description": "Cloud provider metadata, storage, and management endpoints",
+      "count": 35000,
+      "compressed_size_mb": 0.7,
+      "url": "https://github.com/RowanDark/kitestring/releases/download/wordlists-latest/cloud.ks"
+    },
+    {
+      "alias": "springboot",
+      "filename": "springboot.ks",
+      "description": "Spring Boot Actuator and common Java framework routes",
+      "count": 18000,
+      "compressed_size_mb": 0.4,
+      "url": "https://github.com/RowanDark/kitestring/releases/download/wordlists-latest/springboot.ks"
+    }
+  ]
+}
