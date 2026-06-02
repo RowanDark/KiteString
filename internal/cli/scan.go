@@ -26,7 +26,8 @@ Example:
 
 func init() {
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
-	scanCmd.Flags().StringP("wordlist", "w", "", "supplemental wordlist to use during scan")
+	scanCmd.Flags().StringArrayP("wordlist", "w", nil, "wordlist file(s) to use (.ks, .txt, or .json); repeatable")
+	scanCmd.Flags().Int("head", 0, "use only the first N routes from each wordlist (0 = all)")
 	scanCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
 	scanCmd.Flags().IntP("threads", "t", 10, "number of concurrent threads")
 	scanCmd.Flags().BoolP("follow-redirects", "r", true, "follow HTTP redirects")
