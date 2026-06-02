@@ -161,24 +161,32 @@ func (b *Bruter) handleResult(result *kshttp.Result) {
 		return
 	}
 
-	if b.config.WildcardDetection && !b.config.DisablePreflight {
+	var baselineBodies []string
+	if !b.config.DisablePreflight {
 		prefix := prefixAtDepth(result.Req.Route.Path, b.config.PreflightDepth)
 		b.mu.RLock()
 		hostBaselines := b.baselines[host]
 		b.mu.RUnlock()
 		if hostBaselines != nil {
 			if baseline, ok := hostBaselines[prefix]; ok {
-				if isWildcard(result.Resp, baseline) {
+				if b.config.WildcardDetection && isWildcard(result.Resp, baseline) {
 					if b.quarantine.RecordWildcard(host) {
 						log.Printf("[WARN] host %s quarantined after consecutive wildcard responses", host)
 					}
 					return
 				}
+				if baseline.BodyText != "" {
+					baselineBodies = []string{baseline.BodyText}
+				}
 			}
 		}
 	}
 
-	if !scan.Filter(result, b.config) {
+	fr := scan.Filter(result, b.config, baselineBodies)
+	if !fr.Passed {
+		if b.config.Verbose == "debug" || b.config.Verbose == "trace" {
+			log.Printf("[DEBUG] filtered %s: %s", result.Req.FullURL, fr.Reason)
+		}
 		return
 	}
 
