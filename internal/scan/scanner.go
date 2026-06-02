@@ -48,6 +48,8 @@ func New(config proute.ScanConfig) (*Scanner, error) {
 		MaxRedirects:        config.MaxRedirects,
 		ExtraHeaders:        extraHeaders,
 		BlacklistDomains:    config.BlacklistDomains,
+		Scope:               config.Scope,
+		Verbose:             config.Verbose,
 	})
 
 	limiter := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{

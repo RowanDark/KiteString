@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	nethttp "net/http"
 	"strings"
 	"time"
+
+	"github.com/RowanDark/kitestring/pkg/proute"
 )
 
 // ClientConfig holds creation parameters for a Client.
@@ -17,7 +20,9 @@ type ClientConfig struct {
 	UserAgent           string
 	MaxRedirects        int
 	ExtraHeaders        map[string]string
-	BlacklistDomains    []string // do not follow redirects to these domains
+	BlacklistDomains    []string             // do not follow redirects to these domains
+	Scope               proute.ScopeChecker  // optional; blocks out-of-scope redirect destinations
+	Verbose             string               // verbosity level for redirect-blocked log messages
 }
 
 // Client wraps net/http.Client with KiteString-specific defaults.
@@ -47,6 +52,8 @@ func NewClient(cfg ClientConfig) *Client {
 
 	maxRedir := cfg.MaxRedirects
 	blacklist := cfg.BlacklistDomains
+	scopeChecker := cfg.Scope
+	verbose := cfg.Verbose
 	inner := &nethttp.Client{
 		Transport: transport,
 		Timeout:   cfg.Timeout,
@@ -62,6 +69,12 @@ func NewClient(cfg ClientConfig) *Client {
 				if hostname == domain || strings.HasSuffix(hostname, "."+domain) {
 					return nethttp.ErrUseLastResponse
 				}
+			}
+			if scopeChecker != nil && scopeChecker.IsOutOfScope(hostname) {
+				if verbose == "warn" || verbose == "info" || verbose == "debug" || verbose == "trace" {
+					log.Printf("[WARN] blocked out-of-scope redirect to %s", req.URL)
+				}
+				return nethttp.ErrUseLastResponse
 			}
 			return nil
 		},

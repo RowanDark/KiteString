@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/RowanDark/kitestring/internal/scan"
+	"github.com/RowanDark/kitestring/internal/scope"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
 	"github.com/spf13/cobra"
@@ -49,6 +50,39 @@ Examples:
 		targets, err := proute.ParseTarget(targetStr)
 		if err != nil {
 			return fmt.Errorf("invalid target: %w", err)
+		}
+
+		// --- Scope setup ---
+		scopeFile, _ := cmd.Flags().GetString("scope-file")
+		scopePatterns, _ := cmd.Flags().GetStringArray("scope")
+		excludePatterns, _ := cmd.Flags().GetStringArray("exclude")
+		warnOutOfScope, _ := cmd.Flags().GetBool("warn-out-of-scope")
+
+		var sc *scope.Scope
+		if scopeFile != "" {
+			sc, err = scope.LoadScope(scopeFile)
+			if err != nil {
+				return fmt.Errorf("scope file: %w", err)
+			}
+			sc = scope.New(append(sc.Includes(), scopePatterns...), append(sc.Excludes(), excludePatterns...))
+		} else if len(scopePatterns) > 0 || len(excludePatterns) > 0 {
+			sc = scope.New(scopePatterns, excludePatterns)
+		}
+
+		if sc != nil {
+			filtered, skipped := sc.FilterTargets(targets)
+			if skipped > 0 && warnOutOfScope {
+				for _, t := range targets {
+					if sc.IsOutOfScope(t.Host) {
+						fmt.Fprintf(os.Stderr, "[WARN] skipping out-of-scope target: %s\n", t.Raw)
+					}
+				}
+			}
+			targets = filtered
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Scope: %d in-scope target(s), %d skipped\n",
+					len(targets), skipped)
+			}
 		}
 
 		// --- Wordlist loading ---
@@ -129,6 +163,9 @@ Examples:
 		config, buildErr := buildScanConfig(cmd)
 		if buildErr != nil {
 			return buildErr
+		}
+		if sc != nil {
+			config.Scope = sc
 		}
 
 		// --- Run ---
@@ -268,6 +305,13 @@ func init() {
 	// Similarity filtering flags
 	scanCmd.Flags().Float64("similarity-threshold", 0.85, "body similarity threshold for suppressing templated responses (0.0–1.0)")
 	scanCmd.Flags().Bool("disable-similarity", false, "skip body similarity scoring (faster, but may produce false positives on templated 200 responses)")
+
+	// Scope flags
+	scanCmd.Flags().String("scope-file", "", "path to scope file (# comments, ! prefix for excludes)")
+	scanCmd.Flags().StringArray("scope", nil, "inline include pattern (e.g. *.example.com); repeatable")
+	scanCmd.Flags().StringArray("exclude", nil, "inline exclude pattern (e.g. staging.example.com); repeatable")
+	scanCmd.Flags().Bool("skip-out-of-scope", false, "silently skip out-of-scope targets (default when scope is defined)")
+	scanCmd.Flags().Bool("warn-out-of-scope", false, "log a warning for each skipped out-of-scope target")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
