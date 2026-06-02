@@ -9,6 +9,70 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var wordlistSeclistsCmd = &cobra.Command{
+	Use:   "seclists",
+	Short: "Fetch and compile SecLists wordlists",
+	Long: `Fetch wordlists from the SecLists GitHub repository and compile them
+to .ks format for use with ks scan and ks brute.`,
+}
+
+var wordlistSeclistsListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Print available SecLists aliases",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		entries := wordlist.ListSecListAliases()
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ALIAS\tSECLISTS PATH")
+		fmt.Fprintln(w, "-----\t-------------")
+		for _, e := range entries {
+			fmt.Fprintf(w, "%s\t%s\n", e.Alias, e.RepoPath)
+		}
+		return w.Flush()
+	},
+}
+
+var wordlistSeclistsFetchCmd = &cobra.Command{
+	Use:   "fetch [alias]",
+	Short: "Fetch and cache a SecLists wordlist",
+	Long: `Download a SecLists wordlist by alias and compile it to .ks format in
+~/.cache/kitestring/wordlists/ as sl-<alias>.ks.
+
+Use --all to fetch every defined alias.
+
+Examples:
+  ks wordlist seclists fetch api-endpoints
+  ks wordlist seclists fetch --all`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		all, _ := cmd.Flags().GetBool("all")
+
+		if all {
+			for _, e := range wordlist.ListSecListAliases() {
+				fmt.Printf("Fetching %s ...\n", e.Alias)
+				path, err := wordlist.ResolveSecList(e.Alias)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("  Saved → %s\n", path)
+			}
+			return nil
+		}
+
+		if len(args) == 0 {
+			return fmt.Errorf("provide an alias or use --all; run: ks wordlist seclists list")
+		}
+
+		alias := args[0]
+		fmt.Printf("Fetching %s ...\n", alias)
+		path, err := wordlist.ResolveSecList(alias)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("  Saved → %s\n", path)
+		return nil
+	},
+}
+
 var wordlistCmd = &cobra.Command{
 	Use:   "wordlist",
 	Short: "Wordlist management",
@@ -97,7 +161,13 @@ func init() {
 
 	wordlistCompileCmd.Flags().StringP("output", "o", "", "output .ks file path (default: <input>.ks)")
 
+	wordlistSeclistsFetchCmd.Flags().Bool("all", false, "fetch and compile all defined SecLists aliases")
+
+	wordlistSeclistsCmd.AddCommand(wordlistSeclistsListCmd)
+	wordlistSeclistsCmd.AddCommand(wordlistSeclistsFetchCmd)
+
 	wordlistCmd.AddCommand(wordlistListCmd)
 	wordlistCmd.AddCommand(wordlistUpdateCmd)
 	wordlistCmd.AddCommand(wordlistCompileCmd)
+	wordlistCmd.AddCommand(wordlistSeclistsCmd)
 }

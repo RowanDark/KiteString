@@ -25,6 +25,7 @@ Example:
 		aliases, _ := cmd.Flags().GetStringArray("wordlist-alias")
 		wordlistFiles, _ := cmd.Flags().GetStringArray("wordlist")
 		headN, _ := cmd.Flags().GetInt("head")
+		seclistsAlias, _ := cmd.Flags().GetString("seclists")
 
 		// Resolve any alias specs (e.g. "apiroutes" or "apiroutes:20000")
 		// and append the resulting file paths to wordlistFiles.
@@ -38,6 +39,15 @@ Example:
 			if limit > 0 && headN == 0 {
 				headN = limit
 			}
+		}
+
+		// Resolve --seclists alias, fetching and caching on demand.
+		if seclistsAlias != "" {
+			path, err := wordlist.ResolveSecList(seclistsAlias)
+			if err != nil {
+				return err
+			}
+			wordlistFiles = append(wordlistFiles, path)
 		}
 
 		_ = wordlistFiles
@@ -56,4 +66,5 @@ func init() {
 	scanCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
 	scanCmd.Flags().IntP("threads", "t", 10, "number of concurrent threads")
 	scanCmd.Flags().BoolP("follow-redirects", "r", true, "follow HTTP redirects")
+	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand and use as wordlist (e.g. api-endpoints)")
 }
