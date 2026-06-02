@@ -1,0 +1,30 @@
+syntax = "proto3";
+package ksfile;
+
+option go_package = "github.com/RowanDark/kitestring/pkg/ksfile";
+
+message KSFile {
+  uint32 version = 1;
+  string name = 2;
+  string description = 3;
+  string source = 4;
+  string created_at = 5;
+  repeated KSRoute routes = 6;
+}
+
+message KSRoute {
+  string method = 1;
+  string path = 2;
+  string content_type = 3;
+  string ksuid = 4;
+  repeated KSCrumb headers = 5;
+  repeated KSCrumb query_params = 6;
+  repeated KSCrumb body_params = 7;
+}
+
+message KSCrumb {
+  string key = 1;
+  int32 type = 2;
+  bool required = 3;
+  string example = 4;
+}
