@@ -1,0 +1,26 @@
+swagger: "2.0"
+info:
+  title: Test YAML API
+  version: "1.0"
+basePath: /api
+paths:
+  /ping:
+    get:
+      parameters:
+        - name: verbose
+          in: query
+          type: boolean
+          required: false
+  /echo:
+    post:
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          schema:
+            properties:
+              message:
+                type: string
+              count:
+                type: integer

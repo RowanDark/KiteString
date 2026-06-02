@@ -1,0 +1,55 @@
+{
+  "swagger": "2.0",
+  "info": {"title": "Test API", "version": "1.0"},
+  "basePath": "/v1",
+  "consumes": ["application/json"],
+  "paths": {
+    "/users": {
+      "get": {
+        "parameters": [
+          {"name": "limit",  "in": "query",  "type": "integer", "required": false},
+          {"name": "email",  "in": "query",  "type": "string",  "format": "email", "required": false},
+          {"name": "active", "in": "query",  "type": "boolean", "required": false}
+        ]
+      },
+      "post": {
+        "consumes": ["application/json"],
+        "parameters": [
+          {"name": "X-Request-ID", "in": "header", "type": "string", "required": false},
+          {
+            "name": "body",
+            "in":   "body",
+            "schema": {
+              "properties": {
+                "email":  {"type": "string", "format": "email"},
+                "name":   {"type": "string"},
+                "active": {"type": "boolean"}
+              },
+              "required": ["email", "name"]
+            }
+          }
+        ]
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "parameters": [
+          {"name": "id", "in": "path", "type": "string", "format": "uuid", "required": true}
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {"name": "id", "in": "path", "type": "string", "format": "uuid", "required": true}
+        ]
+      }
+    },
+    "/items": {
+      "get": {
+        "parameters": [
+          {"name": "page", "in": "query", "type": "integer", "required": false},
+          {"name": "size", "in": "query", "type": "integer", "required": false}
+        ]
+      }
+    }
+  }
+}
