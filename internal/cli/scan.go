@@ -14,6 +14,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// defaultCheckpointDir returns ~/.cache/kitestring/checkpoints.
+func defaultCheckpointDir() string {
+	if dir, err := os.UserCacheDir(); err == nil {
+		return dir + "/kitestring/checkpoints"
+	}
+	return os.TempDir() + "/kitestring/checkpoints"
+}
+
 var scanCmd = &cobra.Command{
 	Use:   "scan [url]",
 	Short: "Context-aware API endpoint discovery",
@@ -174,6 +182,55 @@ Examples:
 			return err
 		}
 
+		// --- Checkpoint / Resume ---
+		checkpointPath, _ := cmd.Flags().GetString("checkpoint")
+		resumePath, _ := cmd.Flags().GetString("resume")
+		checkpointInterval, _ := cmd.Flags().GetInt("checkpoint-interval")
+
+		// --resume is an explicit alias for --checkpoint that signals intent.
+		if resumePath != "" && checkpointPath == "" {
+			checkpointPath = resumePath
+		}
+
+		if checkpointPath != "" {
+			var cp *scan.Checkpoint
+			if _, statErr := os.Stat(checkpointPath); statErr == nil {
+				// File exists: resume from previous scan.
+				loaded := &scan.Checkpoint{}
+				if loadErr := loaded.Load(checkpointPath); loadErr != nil {
+					return fmt.Errorf("resume checkpoint: %w", loadErr)
+				}
+				completed := loaded.CompletedCount()
+				remaining := 0
+				for _, t := range targets {
+					remaining += len(loaded.RemainingRoutes(allRoutes, t))
+				}
+				if !quiet {
+					fmt.Fprintf(os.Stderr,
+						"Resuming scan %s (started %s, %d completed requests, ~%d remaining)\n",
+						loaded.ScanID,
+						loaded.StartedAt.Format(time.RFC3339),
+						completed,
+						remaining,
+					)
+				}
+				// Restore quarantined hosts from the previous run.
+				for _, host := range loaded.Quarantined {
+					s.Quarantine().Add(host, "restored from checkpoint")
+				}
+				cp = loaded
+			} else {
+				// File does not exist: start a fresh scan with checkpointing enabled.
+				cp = scan.NewCheckpoint(config, targets, wordlistFiles)
+			}
+
+			s.SetCheckpoint(cp, checkpointPath, checkpointInterval)
+
+			// Re-emit results from the previous run so output contains both
+			// previous and new results.
+			s.ReplayResults()
+		}
+
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Scanning %d target(s) with %d routes...\n",
 				len(targets), len(allRoutes))
@@ -312,6 +369,11 @@ func init() {
 	scanCmd.Flags().StringArray("exclude", nil, "inline exclude pattern (e.g. staging.example.com); repeatable")
 	scanCmd.Flags().Bool("skip-out-of-scope", false, "silently skip out-of-scope targets (default when scope is defined)")
 	scanCmd.Flags().Bool("warn-out-of-scope", false, "log a warning for each skipped out-of-scope target")
+
+	// Checkpoint / resume flags
+	scanCmd.Flags().String("checkpoint", "", "path to checkpoint file; creates new or resumes existing (default dir: ~/.cache/kitestring/checkpoints/)")
+	scanCmd.Flags().String("resume", "", "alias for --checkpoint; explicitly signals resume intent")
+	scanCmd.Flags().Int("checkpoint-interval", 500, "write checkpoint every N completed requests")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
