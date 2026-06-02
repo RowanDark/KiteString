@@ -52,4 +52,7 @@ func init() {
 	bruteCmd.Flags().BoolP("follow-redirects", "r", false, "follow HTTP redirects")
 	bruteCmd.Flags().IntP("timeout", "", 10, "request timeout in seconds")
 	bruteCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand and use as wordlist (e.g. api-endpoints)")
+	bruteCmd.Flags().Bool("disable-precheck", false, "skip preflight host check and wildcard baseline building")
+	bruteCmd.Flags().IntP("preflight-depth", "d", 0, "directory depth for wildcard baseline probing")
+	bruteCmd.Flags().Int("quarantine-threshold", 10, "consecutive wildcard responses before a host is quarantined")
 }

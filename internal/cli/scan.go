@@ -94,4 +94,8 @@ func init() {
 	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand and use as wordlist (e.g. api-endpoints)")
 	scanCmd.Flags().String("openapi-url", "", "fetch and use an OpenAPI/Swagger spec from URL at scan time (no caching)")
 	scanCmd.Flags().String("openapi-file", "", "load and use a local OpenAPI/Swagger spec file at scan time")
+	scanCmd.Flags().Bool("disable-precheck", false, "skip preflight host check and wildcard baseline building")
+	scanCmd.Flags().Bool("kitebuilder-full-scan", false, "skip phase scanning, send all routes regardless of baseline")
+	scanCmd.Flags().Int("preflight-depth", 1, "directory depth for wildcard baseline probing")
+	scanCmd.Flags().Int("quarantine-threshold", 10, "consecutive wildcard responses before a host is quarantined")
 }
