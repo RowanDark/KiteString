@@ -92,6 +92,7 @@ type ScanTarget struct {
 	Port     int
 	BasePath string
 	Raw      string
+	Tags     []string // technology fingerprints from httpx (e.g. ["nginx","php"])
 }
 
 // ScanResult represents a single interesting response.

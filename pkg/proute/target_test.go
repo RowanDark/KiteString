@@ -1,6 +1,7 @@
 package proute
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -99,6 +100,149 @@ func TestParseTargetBareWithSSLPort(t *testing.T) {
 		t.Fatalf("expected 1 target, got %d", len(targets))
 	}
 	assertTarget(t, targets[0], "https", "example.com", 443, "/")
+}
+
+func TestParseInputLineBlank(t *testing.T) {
+	got, err := ParseInputLine("")
+	if err != nil || got != nil {
+		t.Errorf("blank line: expected nil, nil; got %v, %v", got, err)
+	}
+}
+
+func TestParseInputLineWhitespace(t *testing.T) {
+	got, err := ParseInputLine("   ")
+	if err != nil || got != nil {
+		t.Errorf("whitespace line: expected nil, nil; got %v, %v", got, err)
+	}
+}
+
+func TestParseInputLineComment(t *testing.T) {
+	got, err := ParseInputLine("# this is a comment")
+	if err != nil || got != nil {
+		t.Errorf("comment line: expected nil, nil; got %v, %v", got, err)
+	}
+}
+
+func TestParseInputLinePlainURL(t *testing.T) {
+	got, err := ParseInputLine("https://example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "https", "example.com", 443, "/")
+}
+
+func TestParseInputLinePlainHost(t *testing.T) {
+	got, err := ParseInputLine("example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "http", "example.com", 80, "/")
+}
+
+func TestParseInputLineHTTPXStandard(t *testing.T) {
+	line := "https://example.com [200] [Example Title] [nginx,php,jQuery]"
+	got, err := ParseInputLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "https", "example.com", 443, "/")
+	if len(got.Tags) != 3 || got.Tags[0] != "nginx" || got.Tags[1] != "php" || got.Tags[2] != "jQuery" {
+		t.Errorf("expected tags [nginx php jQuery], got %v", got.Tags)
+	}
+}
+
+func TestParseInputLineHTTPXStandardNoTech(t *testing.T) {
+	// Only status + title, no tech bracket — no tags should be extracted.
+	line := "https://example.com [200] [Some Title]"
+	got, err := ParseInputLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "https", "example.com", 443, "/")
+	if len(got.Tags) != 0 {
+		t.Errorf("expected no tags, got %v", got.Tags)
+	}
+}
+
+func TestParseInputLineHTTPXJSON(t *testing.T) {
+	line := `{"url":"https://example.com","status_code":200,"title":"Example","tech":["nginx","php"]}`
+	got, err := ParseInputLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "https", "example.com", 443, "/")
+	if len(got.Tags) != 2 || got.Tags[0] != "nginx" || got.Tags[1] != "php" {
+		t.Errorf("expected tags [nginx php], got %v", got.Tags)
+	}
+}
+
+func TestParseInputLineHTTPXJSONNoTech(t *testing.T) {
+	line := `{"url":"https://example.com","status_code":200,"title":"Example"}`
+	got, err := ParseInputLine(line)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected target, got nil")
+	}
+	assertTarget(t, *got, "https", "example.com", 443, "/")
+	if len(got.Tags) != 0 {
+		t.Errorf("expected no tags, got %v", got.Tags)
+	}
+}
+
+func TestParseInputStream(t *testing.T) {
+	data := "# comment line\n" +
+		"https://alpha.com [200] [Alpha Title] [apache,python]\n" +
+		`{"url":"https://beta.com","status_code":200,"tech":["nginx"]}` + "\n" +
+		"https://gamma.com\n" +
+		"delta.com\n" +
+		"\n" +
+		"   \n"
+
+	targets, err := ParseInputStream(strings.NewReader(data))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(targets) != 4 {
+		t.Errorf("expected 4 targets, got %d", len(targets))
+	}
+}
+
+func TestParseInputStreamEmpty(t *testing.T) {
+	targets, err := ParseInputStream(strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Errorf("expected 0 targets, got %d", len(targets))
+	}
+}
+
+func TestParseInputStreamOnlyComments(t *testing.T) {
+	data := "# first comment\n# second comment\n"
+	targets, err := ParseInputStream(strings.NewReader(data))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(targets) != 0 {
+		t.Errorf("expected 0 targets, got %d", len(targets))
+	}
 }
 
 func assertTarget(t *testing.T, tgt ScanTarget, scheme, host string, port int, basePath string) {
