@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/RowanDark/kitestring/internal/brute"
 	"github.com/RowanDark/kitestring/internal/wordlist"
@@ -169,7 +170,11 @@ func init() {
 	bruteCmd.Flags().IntP("threads", "t", 40, "concurrent connections per host")
 	bruteCmd.Flags().IntP("parallel-hosts", "j", 10, "maximum number of hosts to scan concurrently")
 	bruteCmd.Flags().Int("timeout", 10, "request timeout in seconds")
-	bruteCmd.Flags().Float64("delay", 0, "delay between requests to same host in seconds")
+	bruteCmd.Flags().Duration("delay", 0, "fixed inter-request delay per host (e.g. 200ms, 1s)")
+	bruteCmd.Flags().Int("max-retries", 3, "maximum retries on 429 or connection failure")
+	bruteCmd.Flags().Duration("backoff-base", 5*time.Second, "base duration for exponential backoff on 429")
+	bruteCmd.Flags().Duration("backoff-max", 60*time.Second, "maximum backoff ceiling")
+	bruteCmd.Flags().Int("unreachable-threshold", 5, "consecutive connection failures before marking a host unreachable")
 	bruteCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
 
 	// Filter flags

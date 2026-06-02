@@ -2,6 +2,11 @@ package http
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -152,6 +157,11 @@ func (p *Pool) worker() {
 func (p *Pool) process(job *Job) *Result {
 	host := job.Req.Target.Host
 
+	// Skip immediately if this host is already known unreachable.
+	if p.limiter != nil && p.limiter.IsUnreachable(host) {
+		return &Result{Req: job.Req, Err: fmt.Errorf("%w: %s", ErrHostUnreachable, host)}
+	}
+
 	// Acquire the per-host semaphore before making any network call.
 	sem := p.hostSem(host)
 	select {
@@ -171,6 +181,27 @@ func (p *Pool) process(job *Job) *Result {
 
 		resp, err := p.client.DoContext(p.ctx, job.Req)
 		if err != nil {
+			if p.limiter != nil && isRetryableError(err) {
+				// One retry after a short delay before recording as a failure.
+				select {
+				case <-time.After(p.limiter.ConnRetryDelay()):
+				case <-p.ctx.Done():
+					return &Result{Req: job.Req, Err: context.Canceled}
+				}
+				resp2, err2 := p.client.DoContext(p.ctx, job.Req)
+				if err2 != nil {
+					if p.limiter.RecordFailure(host) {
+						log.Printf("[WARN] host %s is unreachable after consecutive connection failures", host)
+					}
+					return &Result{Req: job.Req, Err: err2}
+				}
+				// Retry succeeded.
+				p.limiter.ResetFailures(host)
+				if resp2.StatusCode != 429 {
+					p.limiter.ResetBackoff(host)
+				}
+				return &Result{Req: job.Req, Resp: resp2}
+			}
 			return &Result{Req: job.Req, Err: err}
 		}
 
@@ -189,6 +220,7 @@ func (p *Pool) process(job *Job) *Result {
 
 		if p.limiter != nil && resp.StatusCode != 429 {
 			p.limiter.ResetBackoff(host)
+			p.limiter.ResetFailures(host)
 		}
 
 		return &Result{Req: job.Req, Resp: resp}
@@ -199,4 +231,27 @@ func (p *Pool) process(job *Job) *Result {
 func (p *Pool) hostSem(host string) chan struct{} {
 	v, _ := p.hostSems.LoadOrStore(host, make(chan struct{}, p.maxConn))
 	return v.(chan struct{})
+}
+
+// isRetryableError reports whether err is a transient connection-level error
+// that warrants a single immediate retry (connection refused, timeout, EOF, etc.).
+func isRetryableError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// Connection refused, reset, or other dial/read errors.
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	// EOF means the server closed the connection before sending a response.
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	// Timeout via net.Error.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
 }

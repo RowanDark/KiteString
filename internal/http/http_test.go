@@ -252,6 +252,239 @@ func TestPool_Shutdown_NoDrop(t *testing.T) {
 	}
 }
 
+// --- Always-429 host is skipped after max retries ---
+
+func TestPool_429AlwaysExceeded(t *testing.T) {
+	var calls atomic.Int32
+
+	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		calls.Add(1)
+		w.WriteHeader(nethttp.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	limiter := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		MaxRetries:  2,
+		BaseBackoff: time.Millisecond,
+		MaxBackoff:  2 * time.Millisecond,
+	})
+
+	pool := kshttp.NewPool(kshttp.PoolConfig{
+		MaxConnPerHost:   2,
+		MaxParallelHosts: 2,
+		Client:           kshttp.NewClient(kshttp.ClientConfig{}),
+		Limiter:          limiter,
+	})
+
+	target := targetFromServer(srv)
+	req, err := kshttp.Build(proute.Route{Method: "GET", Path: "/always429"}, target)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	pool.Submit(req)
+
+	var result *kshttp.Result
+	for r := range pool.Results() {
+		result = r
+		break
+	}
+	pool.Shutdown()
+
+	if result == nil {
+		t.Fatal("no result received")
+	}
+	// After max retries the 429 is returned as-is (not an error).
+	if result.Resp == nil {
+		t.Fatal("expected a response, got nil")
+	}
+	if result.Resp.StatusCode != nethttp.StatusTooManyRequests {
+		t.Errorf("want 429, got %d", result.Resp.StatusCode)
+	}
+	// Server should have been called maxRetries+1 times (initial + retries).
+	if got := calls.Load(); got < 2 {
+		t.Errorf("want ≥2 server calls, got %d", got)
+	}
+}
+
+// --- Backoff duration calculation ---
+
+func TestRateLimiter_Backoff(t *testing.T) {
+	rl := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		BaseBackoff: 5 * time.Second,
+		MaxBackoff:  60 * time.Second,
+	})
+	cases := []struct {
+		attempt int
+		want    time.Duration
+	}{
+		{0, 5 * time.Second},
+		{1, 10 * time.Second},
+		{3, 40 * time.Second},
+		{4, 60 * time.Second}, // capped: 5<<4 = 80s → 60s
+	}
+	for _, tc := range cases {
+		got := rl.Backoff("example.com", tc.attempt)
+		if got != tc.want {
+			t.Errorf("Backoff(attempt=%d): want %v, got %v", tc.attempt, tc.want, got)
+		}
+	}
+}
+
+// --- RecordResponse increments/resets backoff counter ---
+
+func TestRateLimiter_RecordResponse(t *testing.T) {
+	rl := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		BaseBackoff: 5 * time.Second,
+		MaxBackoff:  60 * time.Second,
+		MaxRetries:  5,
+	})
+	host := "record-test.example"
+
+	// Two 429s then a 200 should reset the backoff.
+	rl.RecordResponse(host, 429)
+	rl.RecordResponse(host, 429)
+	rl.RecordResponse(host, 200)
+
+	// After reset, On429 with attempt=0 should use backoffN=0 (base backoff).
+	delay, ok := rl.On429(host, 0)
+	if !ok {
+		t.Fatal("On429 should allow retry")
+	}
+	if delay != 5*time.Second {
+		t.Errorf("want 5s after reset, got %v", delay)
+	}
+}
+
+// --- --delay produces measurable inter-request spacing ---
+
+func TestRateLimiter_Delay(t *testing.T) {
+	const delayTarget = 100 * time.Millisecond
+	var timestamps []time.Time
+	var mu sync.Mutex
+
+	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		mu.Lock()
+		timestamps = append(timestamps, time.Now())
+		mu.Unlock()
+		w.WriteHeader(nethttp.StatusOK)
+	}))
+	defer srv.Close()
+
+	limiter := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		Delay: delayTarget,
+	})
+
+	pool := kshttp.NewPool(kshttp.PoolConfig{
+		MaxConnPerHost:   1,
+		MaxParallelHosts: 1,
+		Client:           kshttp.NewClient(kshttp.ClientConfig{}),
+		Limiter:          limiter,
+	})
+
+	target := targetFromServer(srv)
+	const N = 4
+	var wg sync.WaitGroup
+	wg.Add(N)
+	go func() {
+		for range pool.Results() {
+			wg.Done()
+		}
+	}()
+
+	for i := 0; i < N; i++ {
+		req, _ := kshttp.Build(proute.Route{Method: "GET", Path: "/delay"}, target)
+		pool.Submit(req)
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timeout waiting for delayed results")
+	}
+	pool.Shutdown()
+
+	mu.Lock()
+	ts := timestamps
+	mu.Unlock()
+
+	if len(ts) < 2 {
+		t.Fatalf("need at least 2 timestamps, got %d", len(ts))
+	}
+	for i := 1; i < len(ts); i++ {
+		gap := ts[i].Sub(ts[i-1])
+		// Allow 50% tolerance above and below the target.
+		if gap < delayTarget/2 {
+			t.Errorf("inter-request gap %v too short (want ≥%v)", gap, delayTarget/2)
+		}
+	}
+}
+
+// --- Host reachability tracking ---
+
+func TestPool_HostUnreachable(t *testing.T) {
+	// Start a server just to get a valid host/port, then close it so all
+	// connection attempts will be refused.
+	srv := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		w.WriteHeader(nethttp.StatusOK)
+	}))
+	target := targetFromServer(srv)
+	srv.Close() // port is now closed; subsequent dials will be refused
+
+	limiter := kshttp.NewRateLimiter(kshttp.RateLimiterConfig{
+		UnreachableThreshold: 2,
+		BaseBackoff:          time.Millisecond,
+		MaxBackoff:           5 * time.Millisecond,
+		ConnRetryDelay:       5 * time.Millisecond, // fast retry for testing
+	})
+
+	pool := kshttp.NewPool(kshttp.PoolConfig{
+		MaxConnPerHost:   1,
+		MaxParallelHosts: 1,
+		Client:           kshttp.NewClient(kshttp.ClientConfig{Timeout: 500 * time.Millisecond}),
+		Limiter:          limiter,
+	})
+
+	// Submit enough requests to exceed the unreachable threshold.
+	const N = 4
+	var wg sync.WaitGroup
+	wg.Add(N)
+
+	var errCount atomic.Int32
+	go func() {
+		for r := range pool.Results() {
+			if r.Err != nil {
+				errCount.Add(1)
+			}
+			wg.Done()
+		}
+	}()
+
+	for i := 0; i < N; i++ {
+		req, _ := kshttp.Build(proute.Route{Method: "GET", Path: "/unreachable"}, target)
+		pool.Submit(req)
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("timeout waiting for unreachable results")
+	}
+	pool.Shutdown()
+
+	if errCount.Load() == 0 {
+		t.Error("expected at least one error result for unreachable host")
+	}
+	host := target.Host
+	if !limiter.IsUnreachable(host) {
+		t.Errorf("host %s should be marked unreachable after consecutive failures", host)
+	}
+}
+
 // --- Per-host connection limiting ---
 
 func TestPool_PerHostConcurrency(t *testing.T) {
