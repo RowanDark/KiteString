@@ -21,7 +21,7 @@ type Scanner struct {
 	pool            *kshttp.Pool
 	preflightClient *nethttp.Client
 	quarantine      *Quarantine
-	out             *output.Writer
+	out             output.Writer
 	baselines       map[string]map[string]*Baseline // host → prefix → baseline
 	mu              sync.RWMutex
 	resultCount     int64
@@ -72,7 +72,7 @@ func New(config proute.ScanConfig) (*Scanner, error) {
 		pool:            pool,
 		preflightClient: &nethttp.Client{Timeout: config.Timeout},
 		quarantine:      NewQuarantine(config.QuarantineThresh),
-		out:             output.New(config.OutputFormat, nil),
+		out:             mustWriter(config.OutputFormat, nil),
 		baselines:       make(map[string]map[string]*Baseline),
 	}, nil
 }
@@ -158,7 +158,7 @@ func (s *Scanner) Quarantine() *Quarantine {
 
 // SetOutput redirects scan result output to w (useful for testing).
 func (s *Scanner) SetOutput(w io.Writer) {
-	s.out.SetWriter(w)
+	s.out = mustWriter(s.config.OutputFormat, w)
 }
 
 func (s *Scanner) handleResult(result *kshttp.Result) {
@@ -212,8 +212,13 @@ func (s *Scanner) handleResult(result *kshttp.Result) {
 		KSUID:         result.Req.Route.KSUID,
 	}
 
-	s.out.Write(sr)
+	_ = s.out.WriteResult(sr)
 	atomic.AddInt64(&s.resultCount, 1)
+}
+
+func mustWriter(format string, w io.Writer) output.Writer {
+	ow, _ := output.NewWriter(format, w)
+	return ow
 }
 
 func parseExtraHeaders(headers []string) map[string]string {

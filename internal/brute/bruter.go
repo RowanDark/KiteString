@@ -22,7 +22,7 @@ type Bruter struct {
 	pool            *kshttp.Pool
 	preflightClient *nethttp.Client
 	quarantine      *scan.Quarantine
-	out             *output.Writer
+	out             output.Writer
 	baselines       map[string]map[string]*scan.Baseline
 	mu              sync.RWMutex
 	resultCount     int64
@@ -71,7 +71,7 @@ func New(config proute.ScanConfig) (*Bruter, error) {
 		pool:            pool,
 		preflightClient: &nethttp.Client{Timeout: config.Timeout},
 		quarantine:      scan.NewQuarantine(config.QuarantineThresh),
-		out:             output.New(config.OutputFormat, nil),
+		out:             mustWriter(config.OutputFormat, nil),
 		baselines:       make(map[string]map[string]*scan.Baseline),
 	}, nil
 }
@@ -151,7 +151,7 @@ func (b *Bruter) ResultCount() int64 {
 
 // SetOutput redirects result output to w (useful for testing).
 func (b *Bruter) SetOutput(w io.Writer) {
-	b.out.SetWriter(w)
+	b.out = mustWriter(b.config.OutputFormat, w)
 }
 
 func (b *Bruter) handleResult(result *kshttp.Result) {
@@ -204,7 +204,7 @@ func (b *Bruter) handleResult(result *kshttp.Result) {
 		KSUID:         result.Req.Route.KSUID,
 	}
 
-	b.out.Write(sr)
+	_ = b.out.WriteResult(sr)
 	atomic.AddInt64(&b.resultCount, 1)
 }
 
@@ -236,6 +236,11 @@ func prefixAtDepth(path string, depth int) string {
 		return "/" + strings.Join(parts, "/")
 	}
 	return "/" + strings.Join(parts[:depth], "/")
+}
+
+func mustWriter(format string, w io.Writer) output.Writer {
+	ow, _ := output.NewWriter(format, w)
+	return ow
 }
 
 func mimeType(ct string) string {
