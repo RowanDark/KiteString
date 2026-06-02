@@ -26,7 +26,8 @@ Example:
 }
 
 func init() {
-	bruteCmd.Flags().StringP("wordlist", "w", "", "wordlist file to use (.ks, .txt, or .json)")
+	bruteCmd.Flags().StringArrayP("wordlist", "w", nil, "wordlist file(s) to use (.ks, .txt, or .json); repeatable")
+	bruteCmd.Flags().Int("head", 0, "use only the first N routes from each wordlist (0 = all)")
 	bruteCmd.Flags().StringP("status", "s", "200,204,301,302,307,401,403", "comma-separated status codes to report")
 	bruteCmd.Flags().IntP("threads", "t", 40, "number of concurrent threads")
 	bruteCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
