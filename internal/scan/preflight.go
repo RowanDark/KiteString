@@ -18,6 +18,10 @@ type HostProfile struct {
 	ContentType   string
 }
 
+// maxBaselineBodyText is the maximum number of bytes stored in Baseline.BodyText
+// for similarity scoring. Bodies longer than this are truncated.
+const maxBaselineBodyText = 64 * 1024
+
 // Baseline captures the response signature of a path prefix used for wildcard detection.
 type Baseline struct {
 	PathPrefix    string
@@ -25,6 +29,7 @@ type Baseline struct {
 	ContentLength int64
 	ContentType   string
 	BodyHash      [32]byte
+	BodyText      string // truncated body for similarity scoring; see maxBaselineBodyText
 }
 
 // CheckHost sends a HEAD request to the target root, confirms reachability,
@@ -84,12 +89,18 @@ func BuildBaselines(target proute.ScanTarget, routes []proute.Route, depth int, 
 			cl = int64(len(body))
 		}
 
+		bt := string(body)
+		if len(bt) > maxBaselineBodyText {
+			bt = bt[:maxBaselineBodyText]
+		}
+
 		baselines[prefix] = &Baseline{
 			PathPrefix:    prefix,
 			StatusCode:    resp.StatusCode,
 			ContentLength: cl,
 			ContentType:   resp.Header.Get("Content-Type"),
 			BodyHash:      sha256.Sum256(body),
+			BodyText:      bt,
 		}
 	}
 

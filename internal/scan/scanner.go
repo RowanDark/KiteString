@@ -167,24 +167,32 @@ func (s *Scanner) handleResult(result *kshttp.Result) {
 	}
 
 	// Wildcard detection: compare result against its path-prefix baseline.
-	if s.config.WildcardDetection && !s.config.DisablePreflight {
+	var baselineBodies []string
+	if !s.config.DisablePreflight {
 		prefix := prefixAtDepth(result.Req.Route.Path, s.config.PreflightDepth)
 		s.mu.RLock()
 		hostBaselines := s.baselines[host]
 		s.mu.RUnlock()
 		if hostBaselines != nil {
 			if baseline, ok := hostBaselines[prefix]; ok {
-				if isWildcardNormalized(result.Resp, baseline) {
+				if s.config.WildcardDetection && isWildcardNormalized(result.Resp, baseline) {
 					if s.quarantine.RecordWildcard(host) {
 						log.Printf("[WARN] host %s quarantined after consecutive wildcard responses", host)
 					}
 					return
 				}
+				if baseline.BodyText != "" {
+					baselineBodies = []string{baseline.BodyText}
+				}
 			}
 		}
 	}
 
-	if !Filter(result, s.config) {
+	fr := Filter(result, s.config, baselineBodies)
+	if !fr.Passed {
+		if s.config.Verbose == "debug" || s.config.Verbose == "trace" {
+			log.Printf("[DEBUG] filtered %s: %s", result.Req.FullURL, fr.Reason)
+		}
 		return
 	}
 

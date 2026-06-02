@@ -173,6 +173,8 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 	filterAPI, _ := cmd.Flags().GetString("filter-api")
 	forceMethod, _ := cmd.Flags().GetString("force-method")
 	blacklistDomains, _ := cmd.Flags().GetStringArray("blacklist-domain")
+	similarityThreshold, _ := cmd.Flags().GetFloat64("similarity-threshold")
+	disableSimilarity, _ := cmd.Flags().GetBool("disable-similarity")
 
 	if !followRedirects {
 		maxRedirects = 0
@@ -188,24 +190,27 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 	}
 
 	return proute.ScanConfig{
-		MaxConnPerHost:     threads,
-		MaxParallelHosts:   parallelHosts,
-		Timeout:            time.Duration(timeoutSec) * time.Second,
-		Delay:              time.Duration(delayMs * float64(time.Second)),
-		FailStatusCodes:    failCodes,
-		SuccessStatusCodes: successCodes,
-		IgnoreLengths:      ignoreLengths,
-		Headers:            headerStrs,
-		UserAgent:          userAgent,
-		MaxRedirects:       maxRedirects,
-		WildcardDetection:  wildcardDetection,
-		QuarantineThresh:   quarantineThresh,
-		OutputFormat:       output, // package-level var bound to -o/--output in root.go
-		DisablePreflight:   disablePreflight,
-		PreflightDepth:     preflightDepth,
-		FilterAPIKSUID:     filterAPI,
-		ForceMethod:        forceMethod,
-		BlacklistDomains:   blacklistDomains,
+		MaxConnPerHost:      threads,
+		MaxParallelHosts:    parallelHosts,
+		Timeout:             time.Duration(timeoutSec) * time.Second,
+		Delay:               time.Duration(delayMs * float64(time.Second)),
+		FailStatusCodes:     failCodes,
+		SuccessStatusCodes:  successCodes,
+		IgnoreLengths:       ignoreLengths,
+		Headers:             headerStrs,
+		UserAgent:           userAgent,
+		MaxRedirects:        maxRedirects,
+		WildcardDetection:   wildcardDetection,
+		QuarantineThresh:    quarantineThresh,
+		OutputFormat:        output, // package-level var bound to -o/--output in root.go
+		DisablePreflight:    disablePreflight,
+		PreflightDepth:      preflightDepth,
+		FilterAPIKSUID:      filterAPI,
+		ForceMethod:         forceMethod,
+		BlacklistDomains:    blacklistDomains,
+		SimilarityThreshold: similarityThreshold,
+		DisableSimilarity:   disableSimilarity,
+		Verbose:             verbose, // package-level var bound to -v/--verbose in root.go
 	}, nil
 }
 
@@ -247,6 +252,10 @@ func init() {
 
 	// API-mode flags
 	scanCmd.Flags().String("filter-api", "", "only scan routes matching this KSUID")
+
+	// Similarity filtering flags
+	scanCmd.Flags().Float64("similarity-threshold", 0.85, "body similarity threshold for suppressing templated responses (0.0–1.0)")
+	scanCmd.Flags().Bool("disable-similarity", false, "skip body similarity scoring (faster, but may produce false positives on templated 200 responses)")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
