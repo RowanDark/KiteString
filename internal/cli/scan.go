@@ -19,13 +19,17 @@ Example:
   ks scan https://example.com
   ks scan https://api.example.com/v1 --depth 3
   ks scan https://api.example.com -A apiroutes
-  ks scan https://api.example.com -A apiroutes:20000`,
+  ks scan https://api.example.com -A apiroutes:20000
+  ks scan https://api.example.com --openapi-url https://api.example.com/openapi.json
+  ks scan https://api.example.com --openapi-file ./local-spec.yaml`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		aliases, _ := cmd.Flags().GetStringArray("wordlist-alias")
 		wordlistFiles, _ := cmd.Flags().GetStringArray("wordlist")
 		headN, _ := cmd.Flags().GetInt("head")
 		seclistsAlias, _ := cmd.Flags().GetString("seclists")
+		openapiURL, _ := cmd.Flags().GetString("openapi-url")
+		openapiFile, _ := cmd.Flags().GetString("openapi-file")
 
 		// Resolve any alias specs (e.g. "apiroutes" or "apiroutes:20000")
 		// and append the resulting file paths to wordlistFiles.
@@ -50,6 +54,27 @@ Example:
 			wordlistFiles = append(wordlistFiles, path)
 		}
 
+		// Fetch OpenAPI spec at scan time (no caching).
+		if openapiURL != "" {
+			fmt.Printf("Fetching OpenAPI spec from %s ...\n", openapiURL)
+			routes, err := wordlist.FetchFromURL(openapiURL)
+			if err != nil {
+				return fmt.Errorf("openapi-url: %w", err)
+			}
+			fmt.Printf("  Loaded %d routes from spec\n", len(routes))
+			_ = routes // routes will feed into the scanner once implemented
+		}
+
+		if openapiFile != "" {
+			fmt.Printf("Loading OpenAPI spec from %s ...\n", openapiFile)
+			routes, err := wordlist.FetchFromFile(openapiFile)
+			if err != nil {
+				return fmt.Errorf("openapi-file: %w", err)
+			}
+			fmt.Printf("  Loaded %d routes from spec\n", len(routes))
+			_ = routes // routes will feed into the scanner once implemented
+		}
+
 		_ = wordlistFiles
 		_ = headN
 
@@ -67,4 +92,6 @@ func init() {
 	scanCmd.Flags().IntP("threads", "t", 10, "number of concurrent threads")
 	scanCmd.Flags().BoolP("follow-redirects", "r", true, "follow HTTP redirects")
 	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand and use as wordlist (e.g. api-endpoints)")
+	scanCmd.Flags().String("openapi-url", "", "fetch and use an OpenAPI/Swagger spec from URL at scan time (no caching)")
+	scanCmd.Flags().String("openapi-file", "", "load and use a local OpenAPI/Swagger spec file at scan time")
 }
