@@ -22,6 +22,9 @@ var rootCmd = &cobra.Command{
 fuzzing paths, and replaying captured HTTP requests.
 
 Use 'ks <command> --help' for more information about a command.`,
+	CompletionOptions: cobra.CompletionOptions{
+		DisableDefaultCmd: true,
+	},
 }
 
 func Execute() {
@@ -46,6 +49,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(reportCmd)
 	rootCmd.AddCommand(profileCmd)
+	rootCmd.AddCommand(completionCmd)
 }
 
 func initConfig() {

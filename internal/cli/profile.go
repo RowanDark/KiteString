@@ -13,8 +13,9 @@ import (
 )
 
 var profileCmd = &cobra.Command{
-	Use:   "profile",
-	Short: "Manage named scan profiles",
+	Use:     "profile",
+	Aliases: []string{"p"},
+	Short:   "Manage named scan profiles",
 	Long: `List, inspect, and create named scan profiles from the KiteString config file.
 
 Profiles let you define scope, wordlists, rate limits, and output settings once
@@ -27,8 +28,9 @@ Examples:
 }
 
 var profileListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all defined profiles with key settings",
+	Use:     "list",
+	Aliases: []string{"ls", "l"},
+	Short:   "List all defined profiles with key settings",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadActiveConfig()
 		if err != nil {
@@ -71,8 +73,9 @@ var profileListCmd = &cobra.Command{
 }
 
 var profileShowCmd = &cobra.Command{
-	Use:   "show <name>",
-	Short: "Show the fully resolved config for a profile (defaults merged in)",
+	Use:     "show <name>",
+	Aliases: []string{"s"},
+	Short:   "Show the fully resolved config for a profile (defaults merged in)",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadActiveConfig()

@@ -13,8 +13,9 @@ import (
 )
 
 var replayCmd = &cobra.Command{
-	Use:   "replay [result-line]",
-	Short: "Reconstruct and re-execute a captured HTTP request",
+	Use:     "replay [result-line]",
+	Aliases: []string{"r"},
+	Short:   "Reconstruct and re-execute a captured HTTP request",
 	Long: `Replay takes a single result line from KiteString scan output (pretty, text, or
 JSONL format) and reconstructs the original HTTP request, optionally forwarding
 it through a proxy like Burp Suite or OWASP ZAP.
@@ -157,12 +158,12 @@ func replayLine(line string, wordlistFiles []string, client *nethttp.Client, sho
 func init() {
 	replayCmd.Flags().StringArrayP("wordlist", "w", nil,
 		"wordlist file(s) for KSUID lookup and parameter reconstruction (.ks, .txt, .json); repeatable")
-	replayCmd.Flags().String("proxy", "",
+	replayCmd.Flags().StringP("proxy", "P", "",
 		"proxy URL to forward the request through (e.g. http://localhost:8080, socks5://127.0.0.1:1080)")
 	replayCmd.Flags().Bool("tls-skip-verify", false,
 		"skip TLS certificate verification (required for Burp Suite interception)")
-	replayCmd.Flags().Bool("show-request", false,
+	replayCmd.Flags().BoolP("show-request", "Q", false,
 		"print the raw reconstructed HTTP request before sending")
-	replayCmd.Flags().Bool("show-response", false,
+	replayCmd.Flags().BoolP("show-response", "Z", false,
 		"print the full response body after receiving")
 }
