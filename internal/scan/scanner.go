@@ -25,6 +25,7 @@ type Scanner struct {
 	baselines       map[string]map[string]*Baseline // host → prefix → baseline
 	mu              sync.RWMutex
 	resultCount     int64
+	collected       []proute.ScanResult
 }
 
 // New initialises all scanner components from config and returns a ready Scanner.
@@ -155,6 +156,15 @@ func (s *Scanner) Quarantine() *Quarantine {
 	return s.quarantine
 }
 
+// Results returns a snapshot of all collected scan results.
+func (s *Scanner) Results() []proute.ScanResult {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]proute.ScanResult, len(s.collected))
+	copy(out, s.collected)
+	return out
+}
+
 // SetOutput redirects scan result output to w (useful for testing).
 func (s *Scanner) SetOutput(w io.Writer) {
 	s.out.SetWriter(w)
@@ -213,6 +223,10 @@ func (s *Scanner) handleResult(result *kshttp.Result) {
 
 	s.out.Write(sr)
 	atomic.AddInt64(&s.resultCount, 1)
+
+	s.mu.Lock()
+	s.collected = append(s.collected, sr)
+	s.mu.Unlock()
 }
 
 func parseExtraHeaders(headers []string) map[string]string {

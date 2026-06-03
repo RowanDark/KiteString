@@ -26,6 +26,7 @@ type Bruter struct {
 	baselines       map[string]map[string]*scan.Baseline
 	mu              sync.RWMutex
 	resultCount     int64
+	collected       []proute.ScanResult
 }
 
 // New initialises all Bruter components from config and returns a ready Bruter.
@@ -149,6 +150,15 @@ func (b *Bruter) ResultCount() int64 {
 	return atomic.LoadInt64(&b.resultCount)
 }
 
+// Results returns a snapshot of all collected scan results.
+func (b *Bruter) Results() []proute.ScanResult {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make([]proute.ScanResult, len(b.collected))
+	copy(out, b.collected)
+	return out
+}
+
 // SetOutput redirects result output to w (useful for testing).
 func (b *Bruter) SetOutput(w io.Writer) {
 	b.out.SetWriter(w)
@@ -206,6 +216,10 @@ func (b *Bruter) handleResult(result *kshttp.Result) {
 
 	b.out.Write(sr)
 	atomic.AddInt64(&b.resultCount, 1)
+
+	b.mu.Lock()
+	b.collected = append(b.collected, sr)
+	b.mu.Unlock()
 }
 
 // isWildcard compares a normalized response against a preflight baseline.
