@@ -116,6 +116,13 @@ func (p *Pool) Shutdown() {
 	})
 }
 
+// Done returns a channel that is closed when the pool context is cancelled,
+// which happens when Shutdown is called. Callers can select on this to detect
+// when the pool is no longer accepting work.
+func (p *Pool) Done() <-chan struct{} {
+	return p.ctx.Done()
+}
+
 // WatchSignals starts a background goroutine that calls Shutdown when the
 // process receives SIGINT or SIGTERM, enabling clean exit on Ctrl-C.
 func (p *Pool) WatchSignals() {

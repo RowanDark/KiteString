@@ -61,6 +61,17 @@ func (q *Quarantine) Add(host string, reason string) {
 	log.Printf("[INFO] quarantined host %s: %s", host, reason)
 }
 
+// List returns a snapshot of all currently quarantined host names.
+func (q *Quarantine) List() []string {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	hosts := make([]string, 0, len(q.entries))
+	for host := range q.entries {
+		hosts = append(hosts, host)
+	}
+	return hosts
+}
+
 // RecordWildcard records a consecutive wildcard hit for host. When the hit
 // count reaches the threshold the host is automatically quarantined.
 // Returns true if the host was quarantined on this call.
