@@ -44,6 +44,7 @@ func init() {
 	rootCmd.AddCommand(wordlistCmd)
 	rootCmd.AddCommand(replayCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(reportCmd)
 }
 
 func initConfig() {

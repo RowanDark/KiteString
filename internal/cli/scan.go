@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RowanDark/kitestring/internal/input"
+	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/recon"
 	"github.com/RowanDark/kitestring/internal/scan"
 	"github.com/RowanDark/kitestring/internal/scope"
@@ -212,12 +213,36 @@ Examples:
 				len(targets), len(allRoutes))
 		}
 
+		start := time.Now()
 		if err := s.Run(targets, allRoutes); err != nil {
 			return err
 		}
+		elapsed := time.Since(start)
 
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", s.ResultCount())
+		}
+
+		reportFormat, _ := cmd.Flags().GetString("report")
+		if reportFormat != "" {
+			wordlistNames, _ := cmd.Flags().GetStringArray("wordlist")
+			targetStr := ""
+			if len(targets) > 0 {
+				targetStr = targets[0].Host
+			}
+			meta := ksoutput.ReportMeta{
+				Target:    targetStr,
+				ScanDate:  time.Now(),
+				Wordlists: wordlistNames,
+				Duration:  elapsed,
+				KSVersion: Version,
+			}
+			path, reportErr := writeAutoReport(s.Results(), meta, reportFormat)
+			if reportErr != nil {
+				fmt.Fprintf(os.Stderr, "[warn] report generation failed: %v\n", reportErr)
+			} else if !quiet {
+				fmt.Fprintf(os.Stderr, "Report written to %s\n", path)
+			}
 		}
 
 		return nil
@@ -379,6 +404,9 @@ func init() {
 	scanCmd.Flags().StringArray("exclude", nil, "inline exclude pattern (e.g. staging.example.com); repeatable")
 	scanCmd.Flags().Bool("skip-out-of-scope", false, "silently skip out-of-scope targets (default when scope is defined)")
 	scanCmd.Flags().Bool("warn-out-of-scope", false, "log a warning for each out-of-scope target or redirect instead of silently skipping")
+
+	// Report generation
+	scanCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, or html")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")

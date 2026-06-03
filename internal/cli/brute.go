@@ -8,6 +8,7 @@ import (
 
 	"github.com/RowanDark/kitestring/internal/brute"
 	"github.com/RowanDark/kitestring/internal/input"
+	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
 	"github.com/spf13/cobra"
@@ -141,12 +142,35 @@ Examples:
 				len(targets), len(paths))
 		}
 
+		start := time.Now()
 		if err := b.Run(targets, paths); err != nil {
 			return err
 		}
+		elapsed := time.Since(start)
 
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", b.ResultCount())
+		}
+
+		reportFormat, _ := cmd.Flags().GetString("report")
+		if reportFormat != "" {
+			targetStr := ""
+			if len(targets) > 0 {
+				targetStr = targets[0].Host
+			}
+			meta := ksoutput.ReportMeta{
+				Target:    targetStr,
+				ScanDate:  time.Now(),
+				Wordlists: wordlistFiles,
+				Duration:  elapsed,
+				KSVersion: Version,
+			}
+			path, reportErr := writeAutoReport(b.Results(), meta, reportFormat)
+			if reportErr != nil {
+				fmt.Fprintf(os.Stderr, "[warn] report generation failed: %v\n", reportErr)
+			} else if !quiet {
+				fmt.Fprintf(os.Stderr, "Report written to %s\n", path)
+			}
 		}
 
 		return nil
@@ -193,6 +217,9 @@ func init() {
 	bruteCmd.Flags().IntP("preflight-depth", "d", 0, "directory depth for wildcard baseline probing (default 0 for brute mode)")
 	bruteCmd.Flags().Int("quarantine-threshold", 10, "consecutive wildcard responses before host quarantine")
 	bruteCmd.Flags().Bool("wildcard-detection", true, "detect and quarantine wildcard routing hosts")
+
+	// Report generation
+	bruteCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, or html")
 
 	// Misc
 	bruteCmd.Flags().String("filter-api", "", "only report routes matching this KSUID")
