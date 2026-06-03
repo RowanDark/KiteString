@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	nethttp "net/http"
 	"os"
 	"time"
 
 	"github.com/RowanDark/kitestring/internal/input"
+	"github.com/RowanDark/kitestring/internal/recon"
 	"github.com/RowanDark/kitestring/internal/scan"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
@@ -120,6 +122,33 @@ Examples:
 
 		if len(allRoutes) == 0 {
 			return fmt.Errorf("no routes loaded: specify -w, -A, -S, or --openapi-url/--openapi-file")
+		}
+
+		// --- JS extraction pre-scan step ---
+		jsExtract, _ := cmd.Flags().GetBool("js-extract")
+		jsDepth, _ := cmd.Flags().GetInt("js-depth")
+		if jsExtract {
+			timeoutSec, _ := cmd.Flags().GetInt("timeout")
+			jsClient := &nethttp.Client{
+				Timeout: time.Duration(timeoutSec) * time.Second,
+			}
+			for _, target := range targets {
+				jsRoutes, jsErr := recon.CrawlAndExtract(target, jsClient, jsDepth)
+				if jsErr != nil {
+					fmt.Fprintf(os.Stderr, "js-extract %s: %v\n", target.Host, jsErr)
+					continue
+				}
+				if verbose == "debug" || verbose == "trace" {
+					for _, r := range jsRoutes {
+						fmt.Fprintf(os.Stderr, "[js-extract] %s %s (source: %s)\n",
+							r.Method, r.Path, r.Source)
+					}
+				} else if !quiet {
+					fmt.Fprintf(os.Stderr, "[js-extract] %s: %d route(s) extracted from JS\n",
+						target.Host, len(jsRoutes))
+				}
+				allRoutes = append(allRoutes, jsRoutes...)
+			}
 		}
 
 		// --- Build scan config ---
@@ -265,6 +294,10 @@ func init() {
 	// Similarity filtering flags
 	scanCmd.Flags().Float64("similarity-threshold", 0.85, "body similarity threshold for suppressing templated responses (0.0–1.0)")
 	scanCmd.Flags().Bool("disable-similarity", false, "skip body similarity scoring (faster, but may produce false positives on templated 200 responses)")
+
+	// JS extraction flags
+	scanCmd.Flags().Bool("js-extract", false, "fetch root page, parse <script> tags, and add extracted routes to scan queue")
+	scanCmd.Flags().Int("js-depth", 1, "pages deep to crawl looking for script tags (1 = root page only)")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
