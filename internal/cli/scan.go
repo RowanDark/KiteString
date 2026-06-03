@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/RowanDark/kitestring/internal/config"
 	"github.com/RowanDark/kitestring/internal/input"
 	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/recon"
@@ -52,7 +53,31 @@ Examples:
 			return fmt.Errorf("no targets found in input")
 		}
 
+		// --- Profile loading ---
+		var activeProfile *config.ProbeConfig
+		profileName, _ := cmd.Flags().GetString("profile")
+		if profileName != "" {
+			cfg, cfgErr := loadActiveConfig()
+			if cfgErr != nil {
+				return fmt.Errorf("loading config for --profile: %w", cfgErr)
+			}
+			pc, profErr := cfg.ApplyProfile(profileName)
+			if profErr != nil {
+				return profErr
+			}
+			activeProfile = pc
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Using profile: %s\n", profileName)
+			}
+		}
+
 		// --- Scope filtering ---
+		// Profile scope_file is used only when --scope-file not explicitly set.
+		if activeProfile != nil && activeProfile.ScopeFile != "" && !cmd.Flags().Changed("scope-file") {
+			if err := cmd.Flags().Set("scope-file", activeProfile.ScopeFile); err != nil {
+				return fmt.Errorf("applying profile scope_file: %w", err)
+			}
+		}
 		sc, scopeErr := buildScope(cmd)
 		if scopeErr != nil {
 			return scopeErr
@@ -78,6 +103,21 @@ Examples:
 		}
 
 		// --- Wordlist loading ---
+		// Inject profile wordlists when -w was not explicitly provided.
+		if activeProfile != nil && len(activeProfile.Wordlists) > 0 && !cmd.Flags().Changed("wordlist") {
+			for _, wl := range activeProfile.Wordlists {
+				if err := cmd.Flags().Set("wordlist", wl); err != nil {
+					return fmt.Errorf("applying profile wordlist: %w", err)
+				}
+			}
+		}
+		// Inject profile openapi_url when --openapi-url not explicitly provided.
+		if activeProfile != nil && activeProfile.OpenAPIURL != "" && !cmd.Flags().Changed("openapi-url") {
+			if err := cmd.Flags().Set("openapi-url", activeProfile.OpenAPIURL); err != nil {
+				return fmt.Errorf("applying profile openapi_url: %w", err)
+			}
+		}
+
 		aliases, _ := cmd.Flags().GetStringArray("wordlist-alias")
 		wordlistFiles, _ := cmd.Flags().GetStringArray("wordlist")
 		headN, _ := cmd.Flags().GetInt("head")
@@ -183,7 +223,7 @@ Examples:
 		}
 
 		// --- Build scan config ---
-		config, buildErr := buildScanConfig(cmd)
+		config, buildErr := buildScanConfig(cmd, activeProfile)
 		if buildErr != nil {
 			return buildErr
 		}
@@ -234,6 +274,12 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", s.ResultCount())
 		}
 
+		// Apply profile report format when --report not explicitly set.
+		if activeProfile != nil && activeProfile.Report != "" && !cmd.Flags().Changed("report") {
+			if err := cmd.Flags().Set("report", activeProfile.Report); err != nil {
+				return fmt.Errorf("applying profile report: %w", err)
+			}
+		}
 		reportFormat, _ := cmd.Flags().GetString("report")
 		if reportFormat != "" {
 			wordlistNames, _ := cmd.Flags().GetStringArray("wordlist")
@@ -290,31 +336,116 @@ func buildScope(cmd *cobra.Command) (*scope.Scope, error) {
 	return s, nil
 }
 
-func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
-	threads, _ := cmd.Flags().GetInt("threads")
-	parallelHosts, _ := cmd.Flags().GetInt("parallel-hosts")
-	timeoutSec, _ := cmd.Flags().GetInt("timeout")
-	delay, _ := cmd.Flags().GetDuration("delay")
+// buildScanConfig constructs a ScanConfig from CLI flags, applying profile values
+// for any flag the user did not explicitly set (precedence: CLI > profile > defaults).
+func buildScanConfig(cmd *cobra.Command, profile *config.ProbeConfig) (proute.ScanConfig, error) {
+	getInt := func(name string, profileVal int) int {
+		if cmd.Flags().Changed(name) {
+			v, _ := cmd.Flags().GetInt(name)
+			return v
+		}
+		if profile != nil && profileVal != 0 {
+			return profileVal
+		}
+		v, _ := cmd.Flags().GetInt(name)
+		return v
+	}
+	getDuration := func(name string, profileVal time.Duration) time.Duration {
+		if cmd.Flags().Changed(name) {
+			v, _ := cmd.Flags().GetDuration(name)
+			return v
+		}
+		if profile != nil {
+			return profileVal
+		}
+		v, _ := cmd.Flags().GetDuration(name)
+		return v
+	}
+	getFloat64 := func(name string, profileVal float64) float64 {
+		if cmd.Flags().Changed(name) {
+			v, _ := cmd.Flags().GetFloat64(name)
+			return v
+		}
+		if profile != nil && profileVal != 0 {
+			return profileVal
+		}
+		v, _ := cmd.Flags().GetFloat64(name)
+		return v
+	}
+	getIntSlice := func(name string, profileVal []int) []int {
+		if cmd.Flags().Changed(name) {
+			v, _ := cmd.Flags().GetIntSlice(name)
+			return v
+		}
+		if profile != nil && len(profileVal) > 0 {
+			return profileVal
+		}
+		v, _ := cmd.Flags().GetIntSlice(name)
+		return v
+	}
+	getString := func(name string, profileVal string) string {
+		if cmd.Flags().Changed(name) {
+			v, _ := cmd.Flags().GetString(name)
+			return v
+		}
+		if profile != nil && profileVal != "" {
+			return profileVal
+		}
+		v, _ := cmd.Flags().GetString(name)
+		return v
+	}
+
+	var profileMaxConn, profileParallel, profileQuarantine int
+	var profileTimeout, profileDelay time.Duration
+	var profileSimilarity float64
+	var profileFailCodes []int
+	var profileUserAgent string
+	if profile != nil {
+		profileMaxConn = profile.MaxConnPerHost
+		profileParallel = profile.MaxParallelHosts
+		profileTimeout = profile.Timeout
+		profileDelay = profile.Delay
+		profileSimilarity = profile.SimilarityThreshold
+		profileFailCodes = profile.FailStatusCodes
+		profileQuarantine = profile.QuarantineThreshold
+		profileUserAgent = profile.UserAgent
+	}
+
+	threads := getInt("threads", profileMaxConn)
+	parallelHosts := getInt("parallel-hosts", profileParallel)
+	timeoutSec := getInt("timeout", 0)
+	var timeout time.Duration
+	if profile != nil && !cmd.Flags().Changed("timeout") && profileTimeout != 0 {
+		timeout = profileTimeout
+	} else {
+		timeout = time.Duration(timeoutSec) * time.Second
+	}
+	delay := getDuration("delay", profileDelay)
 	maxRetries, _ := cmd.Flags().GetInt("max-retries")
 	backoffBase, _ := cmd.Flags().GetDuration("backoff-base")
 	backoffMax, _ := cmd.Flags().GetDuration("backoff-max")
 	unreachableThreshold, _ := cmd.Flags().GetInt("unreachable-threshold")
-	failCodes, _ := cmd.Flags().GetIntSlice("fail-status-codes")
+	failCodes := getIntSlice("fail-status-codes", profileFailCodes)
 	successCodes, _ := cmd.Flags().GetIntSlice("success-status-codes")
 	ignoreLengthStrs, _ := cmd.Flags().GetStringArray("ignore-length")
 	headerStrs, _ := cmd.Flags().GetStringArray("header")
-	userAgent, _ := cmd.Flags().GetString("user-agent")
+	userAgent := getString("user-agent", profileUserAgent)
 	followRedirects, _ := cmd.Flags().GetBool("follow-redirects")
 	maxRedirects, _ := cmd.Flags().GetInt("max-redirects")
 	disablePreflight, _ := cmd.Flags().GetBool("disable-precheck")
 	preflightDepth, _ := cmd.Flags().GetInt("preflight-depth")
-	quarantineThresh, _ := cmd.Flags().GetInt("quarantine-threshold")
+	quarantineThresh := getInt("quarantine-threshold", profileQuarantine)
 	wildcardDetection, _ := cmd.Flags().GetBool("wildcard-detection")
 	filterAPI, _ := cmd.Flags().GetString("filter-api")
 	forceMethod, _ := cmd.Flags().GetString("force-method")
 	blacklistDomains, _ := cmd.Flags().GetStringArray("blacklist-domain")
-	similarityThreshold, _ := cmd.Flags().GetFloat64("similarity-threshold")
+	similarityThreshold := getFloat64("similarity-threshold", profileSimilarity)
 	disableSimilarity, _ := cmd.Flags().GetBool("disable-similarity")
+
+	// Apply profile output format to the package-level output var when -o not set.
+	if profile != nil && profile.Output != "" && !cmd.Flags().Changed("output") {
+		output = profile.Output
+	}
 
 	if !followRedirects {
 		maxRedirects = 0
@@ -332,7 +463,7 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 	return proute.ScanConfig{
 		MaxConnPerHost:       threads,
 		MaxParallelHosts:     parallelHosts,
-		Timeout:              time.Duration(timeoutSec) * time.Second,
+		Timeout:              timeout,
 		Delay:                delay,
 		MaxRetries:           maxRetries,
 		BackoffBase:          backoffBase,
@@ -346,7 +477,7 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 		MaxRedirects:         maxRedirects,
 		WildcardDetection:    wildcardDetection,
 		QuarantineThresh:     quarantineThresh,
-		OutputFormat:         output, // package-level var bound to -o/--output in root.go
+		OutputFormat:         output,
 		DisablePreflight:     disablePreflight,
 		PreflightDepth:       preflightDepth,
 		FilterAPIKSUID:       filterAPI,
@@ -354,7 +485,7 @@ func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
 		BlacklistDomains:     blacklistDomains,
 		SimilarityThreshold:  similarityThreshold,
 		DisableSimilarity:    disableSimilarity,
-		Verbose:              verbose, // package-level var bound to -v/--verbose in root.go
+		Verbose:              verbose,
 	}, nil
 }
 
@@ -426,4 +557,7 @@ func init() {
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
+
+	// Profile
+	scanCmd.Flags().String("profile", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
 }

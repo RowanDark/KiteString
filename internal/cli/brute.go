@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/RowanDark/kitestring/internal/brute"
+	"github.com/RowanDark/kitestring/internal/config"
 	"github.com/RowanDark/kitestring/internal/input"
 	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/wordlist"
@@ -51,7 +52,33 @@ Examples:
 			return fmt.Errorf("no targets found in input")
 		}
 
+		// --- Profile loading ---
+		var activeProfile *config.ProbeConfig
+		profileName, _ := cmd.Flags().GetString("profile")
+		if profileName != "" {
+			cfg, cfgErr := loadActiveConfig()
+			if cfgErr != nil {
+				return fmt.Errorf("loading config for --profile: %w", cfgErr)
+			}
+			pc, profErr := cfg.ApplyProfile(profileName)
+			if profErr != nil {
+				return profErr
+			}
+			activeProfile = pc
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Using profile: %s\n", profileName)
+			}
+		}
+
 		// --- Wordlist loading ---
+		// Inject profile wordlists when -w was not explicitly provided.
+		if activeProfile != nil && len(activeProfile.Wordlists) > 0 && !cmd.Flags().Changed("wordlist") {
+			for _, wl := range activeProfile.Wordlists {
+				if err := cmd.Flags().Set("wordlist", wl); err != nil {
+					return fmt.Errorf("applying profile wordlist: %w", err)
+				}
+			}
+		}
 		wordlistFiles, _ := cmd.Flags().GetStringArray("wordlist")
 		headN, _ := cmd.Flags().GetInt("head")
 		seclistsAlias, _ := cmd.Flags().GetString("seclists")
@@ -126,7 +153,7 @@ Examples:
 		}
 
 		// --- Build scan config ---
-		config, buildErr := buildScanConfig(cmd)
+		config, buildErr := buildScanConfig(cmd, activeProfile)
 		if buildErr != nil {
 			return buildErr
 		}
@@ -152,6 +179,12 @@ Examples:
 			fmt.Fprintf(os.Stderr, "Found %d result(s).\n", b.ResultCount())
 		}
 
+		// Apply profile report format when --report not explicitly set.
+		if activeProfile != nil && activeProfile.Report != "" && !cmd.Flags().Changed("report") {
+			if err := cmd.Flags().Set("report", activeProfile.Report); err != nil {
+				return fmt.Errorf("applying profile report: %w", err)
+			}
+		}
 		reportFormat, _ := cmd.Flags().GetString("report")
 		if reportFormat != "" {
 			targetStr := ""
@@ -223,4 +256,7 @@ func init() {
 
 	// Misc
 	bruteCmd.Flags().String("filter-api", "", "only report routes matching this KSUID")
+
+	// Profile
+	bruteCmd.Flags().String("profile", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
 }

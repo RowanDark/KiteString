@@ -45,6 +45,7 @@ func init() {
 	rootCmd.AddCommand(replayCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(reportCmd)
+	rootCmd.AddCommand(profileCmd)
 }
 
 func initConfig() {
