@@ -208,6 +208,17 @@ Examples:
 			return err
 		}
 
+		// Checkpoint / resume wiring.
+		checkpointPath, _ := cmd.Flags().GetString("checkpoint")
+		resumePath, _ := cmd.Flags().GetString("resume")
+		checkpointInterval, _ := cmd.Flags().GetInt("checkpoint-interval")
+		if resumePath != "" {
+			checkpointPath = resumePath
+		}
+		if checkpointPath != "" {
+			s.SetCheckpoint(checkpointPath, checkpointInterval, wordlistFiles)
+		}
+
 		if !quiet {
 			fmt.Fprintf(os.Stderr, "Scanning %d target(s) with %d routes...\n",
 				len(targets), len(allRoutes))
@@ -407,6 +418,11 @@ func init() {
 
 	// Report generation
 	scanCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, or html")
+
+	// Checkpoint / resume flags
+	scanCmd.Flags().String("checkpoint", "", "path to checkpoint file; creates a new scan or resumes an existing one")
+	scanCmd.Flags().String("resume", "", "alias for --checkpoint that explicitly signals resume intent")
+	scanCmd.Flags().Int("checkpoint-interval", 500, "save checkpoint every N completed requests")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")

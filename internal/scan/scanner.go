@@ -1,12 +1,16 @@
 package scan
 
 import (
+	"fmt"
 	"io"
 	"log"
 	nethttp "net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	kshttp "github.com/RowanDark/kitestring/internal/http"
@@ -26,6 +30,12 @@ type Scanner struct {
 	mu              sync.RWMutex
 	resultCount     int64
 	collected       []proute.ScanResult
+
+	checkpoint          *Checkpoint
+	checkpointPath      string
+	checkpointInterval  int
+	checkpointCounter   int64
+	checkpointWordlists []string
 }
 
 // New initialises all scanner components from config and returns a ready Scanner.
@@ -77,6 +87,19 @@ func New(config proute.ScanConfig) (*Scanner, error) {
 	}, nil
 }
 
+// SetCheckpoint configures checkpoint persistence for this scanner. Call before Run.
+// path is the checkpoint file location; interval is how many completed requests to
+// process between periodic saves (0 or negative uses the default of 500).
+// wordlists records which wordlist files were used (informational, stored in the file).
+func (s *Scanner) SetCheckpoint(path string, interval int, wordlists []string) {
+	s.checkpointPath = path
+	if interval <= 0 {
+		interval = 500
+	}
+	s.checkpointInterval = interval
+	s.checkpointWordlists = wordlists
+}
+
 // Run executes the full scan: preflight → submit jobs → drain and filter results.
 // It returns after all results are consumed or a SIGINT/SIGTERM is received.
 func (s *Scanner) Run(targets []proute.ScanTarget, routes []proute.Route) error {
@@ -84,7 +107,16 @@ func (s *Scanner) Run(targets []proute.ScanTarget, routes []proute.Route) error 
 		return nil
 	}
 
-	s.pool.WatchSignals()
+	// Initialise checkpoint if configured; intercept signals ourselves so we can
+	// save state before the pool shuts down.
+	if s.checkpointPath != "" {
+		if err := s.initCheckpoint(targets); err != nil {
+			return err
+		}
+		s.watchSignalsWithCheckpoint()
+	} else {
+		s.pool.WatchSignals()
+	}
 
 	// Build wildcard baselines for each reachable target before scanning.
 	for _, target := range targets {
@@ -120,7 +152,11 @@ func (s *Scanner) Run(targets []proute.ScanTarget, routes []proute.Route) error 
 	// Submit jobs synchronously so that all goroutines started by pool.Submit
 	// can enqueue into the jobs channel before pool.Shutdown cancels the context.
 	for _, target := range targets {
-		for _, route := range routes {
+		scanRoutes := routes
+		if s.checkpoint != nil {
+			scanRoutes = s.checkpoint.RemainingRoutes(routes, target)
+		}
+		for _, route := range scanRoutes {
 			if s.quarantine.Check(target.Host) {
 				break // skip remaining routes for a quarantined host
 			}
@@ -143,7 +179,70 @@ func (s *Scanner) Run(targets []proute.ScanTarget, routes []proute.Route) error 
 	wg.Wait()
 	s.pool.Shutdown()
 
+	// Write final checkpoint capturing all completed routes and results.
+	if s.checkpoint != nil {
+		s.syncQuarantineToCheckpoint()
+		if err := s.checkpoint.Save(s.checkpointPath); err != nil {
+			log.Printf("[WARN] checkpoint final save: %v", err)
+		}
+	}
+
 	return nil
+}
+
+// initCheckpoint loads an existing checkpoint file (resume) or creates a new one.
+func (s *Scanner) initCheckpoint(targets []proute.ScanTarget) error {
+	cp := &Checkpoint{}
+	if _, err := os.Stat(s.checkpointPath); err == nil {
+		// File exists — resume.
+		if err := cp.Load(s.checkpointPath); err != nil {
+			return fmt.Errorf("load checkpoint %s: %w", s.checkpointPath, err)
+		}
+		log.Printf("[INFO] Resuming scan %s (started %s) — %d completed, continuing...",
+			cp.ScanID, cp.StartedAt.Format(time.RFC3339), len(cp.CompletedKeys))
+		// Restore quarantine list from previous run.
+		for _, host := range cp.Quarantined {
+			s.quarantine.Add(host, "restored from checkpoint")
+		}
+	} else {
+		// New scan.
+		cp = NewCheckpoint(s.config, targets, s.checkpointWordlists)
+		log.Printf("[INFO] Checkpoint enabled — scan ID %s, writing to %s every %d requests",
+			cp.ScanID, s.checkpointPath, s.checkpointInterval)
+	}
+	s.checkpoint = cp
+	return nil
+}
+
+// watchSignalsWithCheckpoint registers a SIGINT/SIGTERM handler that saves the
+// checkpoint before delegating shutdown to the pool.
+func (s *Scanner) watchSignalsWithCheckpoint() {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		defer signal.Stop(ch)
+		select {
+		case sig := <-ch:
+			log.Printf("[INFO] received %s — saving checkpoint before exit", sig)
+			s.syncQuarantineToCheckpoint()
+			if err := s.checkpoint.Save(s.checkpointPath); err != nil {
+				log.Printf("[WARN] checkpoint save on signal: %v", err)
+			}
+			s.pool.Shutdown()
+		case <-s.pool.Done():
+		}
+	}()
+}
+
+// syncQuarantineToCheckpoint copies the current quarantine list into the checkpoint.
+func (s *Scanner) syncQuarantineToCheckpoint() {
+	if s.checkpoint == nil {
+		return
+	}
+	hosts := s.quarantine.List()
+	s.checkpoint.mu.Lock()
+	s.checkpoint.Quarantined = hosts
+	s.checkpoint.mu.Unlock()
 }
 
 // ResultCount returns the number of results that passed all filters and were emitted.
@@ -176,6 +275,18 @@ func (s *Scanner) handleResult(result *kshttp.Result) {
 	}
 
 	host := result.Req.Target.Host
+
+	// Record the route as completed and trigger a periodic checkpoint save.
+	if s.checkpoint != nil {
+		s.checkpoint.MarkComplete(result.Req.Route.Method, host, result.Req.Route.Path)
+		n := atomic.AddInt64(&s.checkpointCounter, 1)
+		if int(n)%s.checkpointInterval == 0 {
+			if err := s.checkpoint.Save(s.checkpointPath); err != nil {
+				log.Printf("[WARN] periodic checkpoint save: %v", err)
+			}
+		}
+	}
+
 	if s.quarantine.Check(host) {
 		return
 	}
@@ -227,6 +338,10 @@ func (s *Scanner) handleResult(result *kshttp.Result) {
 	s.mu.Lock()
 	s.collected = append(s.collected, sr)
 	s.mu.Unlock()
+
+	if s.checkpoint != nil {
+		s.checkpoint.AddResult(sr)
+	}
 }
 
 func parseExtraHeaders(headers []string) map[string]string {
