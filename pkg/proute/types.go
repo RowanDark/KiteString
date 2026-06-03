@@ -169,4 +169,5 @@ type ScanConfig struct {
 	SimilarityThreshold  float64
 	DisableSimilarity    bool
 	Verbose              string
+	ScopeCheck           func(string) bool // if non-nil, out-of-scope redirects are blocked
 }

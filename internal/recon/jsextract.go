@@ -196,7 +196,9 @@ func FindScriptURLs(pageBody string, baseURL string) ([]string, error) {
 // extracts API routes from each JS file, and deduplicates the results.
 // depth=1 processes the root page only; depth=2 also crawls pages linked
 // from the root (same origin) one level deeper.
-func CrawlAndExtract(target proute.ScanTarget, client *http.Client, depth int) ([]proute.Route, error) {
+// inScope, if non-nil, is called with each script URL's hostname; URLs that
+// return false are skipped without fetching.
+func CrawlAndExtract(target proute.ScanTarget, client *http.Client, depth int, inScope func(string) bool) ([]proute.Route, error) {
 	if depth < 1 {
 		depth = 1
 	}
@@ -224,6 +226,12 @@ func CrawlAndExtract(target proute.ScanTarget, client *http.Client, depth int) (
 		}
 
 		for _, jsURL := range scriptURLs {
+			if inScope != nil {
+				parsed, parseErr := url.Parse(jsURL)
+				if parseErr != nil || !inScope(parsed.Hostname()) {
+					continue
+				}
+			}
 			routes, extractErr := ExtractFromURL(jsURL, client)
 			if extractErr != nil {
 				continue
