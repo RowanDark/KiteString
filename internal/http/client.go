@@ -17,7 +17,8 @@ type ClientConfig struct {
 	UserAgent           string
 	MaxRedirects        int
 	ExtraHeaders        map[string]string
-	BlacklistDomains    []string // do not follow redirects to these domains
+	BlacklistDomains    []string        // do not follow redirects to these domains
+	ScopeCheck          func(string) bool // if non-nil, redirects to out-of-scope hosts are blocked
 }
 
 // Client wraps net/http.Client with KiteString-specific defaults.
@@ -47,6 +48,7 @@ func NewClient(cfg ClientConfig) *Client {
 
 	maxRedir := cfg.MaxRedirects
 	blacklist := cfg.BlacklistDomains
+	scopeCheck := cfg.ScopeCheck
 	inner := &nethttp.Client{
 		Transport: transport,
 		Timeout:   cfg.Timeout,
@@ -62,6 +64,9 @@ func NewClient(cfg ClientConfig) *Client {
 				if hostname == domain || strings.HasSuffix(hostname, "."+domain) {
 					return nethttp.ErrUseLastResponse
 				}
+			}
+			if scopeCheck != nil && !scopeCheck(hostname) {
+				return nethttp.ErrUseLastResponse
 			}
 			return nil
 		},

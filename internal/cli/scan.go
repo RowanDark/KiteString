@@ -9,6 +9,7 @@ import (
 	"github.com/RowanDark/kitestring/internal/input"
 	"github.com/RowanDark/kitestring/internal/recon"
 	"github.com/RowanDark/kitestring/internal/scan"
+	"github.com/RowanDark/kitestring/internal/scope"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
 	"github.com/spf13/cobra"
@@ -48,6 +49,31 @@ Examples:
 		}
 		if len(targets) == 0 {
 			return fmt.Errorf("no targets found in input")
+		}
+
+		// --- Scope filtering ---
+		sc, scopeErr := buildScope(cmd)
+		if scopeErr != nil {
+			return scopeErr
+		}
+		if sc != nil {
+			warnOOS, _ := cmd.Flags().GetBool("warn-out-of-scope")
+			filtered, skipped := sc.FilterTargets(targets)
+			if !quiet {
+				fmt.Fprintf(os.Stderr, "Scope: %d in-scope target(s), %d skipped\n",
+					len(filtered), skipped)
+				if warnOOS {
+					for _, t := range targets {
+						if sc.IsOutOfScope(t.Host) {
+							fmt.Fprintf(os.Stderr, "[warn] out-of-scope target skipped: %s\n", t.Host)
+						}
+					}
+				}
+			}
+			targets = filtered
+			if len(targets) == 0 {
+				return fmt.Errorf("no in-scope targets remain after scope filtering")
+			}
 		}
 
 		// --- Wordlist loading ---
@@ -132,8 +158,12 @@ Examples:
 			jsClient := &nethttp.Client{
 				Timeout: time.Duration(timeoutSec) * time.Second,
 			}
+			var jsInScope func(string) bool
+			if sc != nil {
+				jsInScope = sc.IsInScope
+			}
 			for _, target := range targets {
-				jsRoutes, jsErr := recon.CrawlAndExtract(target, jsClient, jsDepth)
+				jsRoutes, jsErr := recon.CrawlAndExtract(target, jsClient, jsDepth, jsInScope)
 				if jsErr != nil {
 					fmt.Fprintf(os.Stderr, "js-extract %s: %v\n", target.Host, jsErr)
 					continue
@@ -157,6 +187,20 @@ Examples:
 			return buildErr
 		}
 
+		// Wire scope check into the scan engine (redirect layer).
+		if sc != nil {
+			warnOOS, _ := cmd.Flags().GetBool("warn-out-of-scope")
+			config.ScopeCheck = func(host string) bool {
+				if sc.IsInScope(host) {
+					return true
+				}
+				if warnOOS && !quiet {
+					fmt.Fprintf(os.Stderr, "[warn] blocked out-of-scope redirect → %s\n", host)
+				}
+				return false
+			}
+		}
+
 		// --- Run ---
 		s, err := scan.New(config)
 		if err != nil {
@@ -178,6 +222,36 @@ Examples:
 
 		return nil
 	},
+}
+
+// buildScope constructs a *scope.Scope from --scope-file, --scope, and --exclude flags.
+// Returns nil when no scope flags are provided (no filtering).
+func buildScope(cmd *cobra.Command) (*scope.Scope, error) {
+	scopeFile, _ := cmd.Flags().GetString("scope-file")
+	scopePatterns, _ := cmd.Flags().GetStringArray("scope")
+	excludePatterns, _ := cmd.Flags().GetStringArray("exclude")
+
+	if scopeFile == "" && len(scopePatterns) == 0 && len(excludePatterns) == 0 {
+		return nil, nil
+	}
+
+	s := scope.New()
+	if scopeFile != "" {
+		if err := s.LoadFile(scopeFile); err != nil {
+			return nil, fmt.Errorf("--scope-file: %w", err)
+		}
+	}
+	for _, p := range scopePatterns {
+		if err := s.AddInclude(p); err != nil {
+			return nil, fmt.Errorf("--scope %q: %w", p, err)
+		}
+	}
+	for _, p := range excludePatterns {
+		if err := s.AddExclude(p); err != nil {
+			return nil, fmt.Errorf("--exclude %q: %w", p, err)
+		}
+	}
+	return s, nil
 }
 
 func buildScanConfig(cmd *cobra.Command) (proute.ScanConfig, error) {
@@ -298,6 +372,13 @@ func init() {
 	// JS extraction flags
 	scanCmd.Flags().Bool("js-extract", false, "fetch root page, parse <script> tags, and add extracted routes to scan queue")
 	scanCmd.Flags().Int("js-depth", 1, "pages deep to crawl looking for script tags (1 = root page only)")
+
+	// Scope flags
+	scanCmd.Flags().String("scope-file", "", "path to scope file (lines: *.example.com, !exclude.com, 192.168.1.0/24)")
+	scanCmd.Flags().StringArray("scope", nil, "inline include pattern (e.g. *.example.com); repeatable")
+	scanCmd.Flags().StringArray("exclude", nil, "inline exclude pattern (e.g. staging.example.com); repeatable")
+	scanCmd.Flags().Bool("skip-out-of-scope", false, "silently skip out-of-scope targets (default when scope is defined)")
+	scanCmd.Flags().Bool("warn-out-of-scope", false, "log a warning for each out-of-scope target or redirect instead of silently skipping")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
