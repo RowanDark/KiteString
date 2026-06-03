@@ -1,13 +1,13 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/RowanDark/kitestring/internal/brute"
+	"github.com/RowanDark/kitestring/internal/input"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
 	"github.com/spf13/cobra"
@@ -31,25 +31,23 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// --- Target ---
-		var targetStr string
-		if len(args) > 0 && args[0] != "-" {
-			targetStr = args[0]
-		} else {
-			sc := bufio.NewScanner(os.Stdin)
-			if sc.Scan() {
-				targetStr = strings.TrimSpace(sc.Text())
-			}
-			if err := sc.Err(); err != nil {
-				return fmt.Errorf("reading stdin: %w", err)
-			}
+		arg := ""
+		if len(args) > 0 {
+			arg = args[0]
 		}
-		if targetStr == "" {
-			return fmt.Errorf("target URL required: pass as argument or pipe to stdin with -")
+		if arg == "" {
+			fi, _ := os.Stdin.Stat()
+			if fi.Mode()&os.ModeCharDevice != 0 {
+				return fmt.Errorf("target URL required: pass as argument or pipe to stdin with -")
+			}
 		}
 
-		targets, err := proute.ParseTarget(targetStr)
+		targets, err := input.ReadTargets(arg, os.Stdin)
 		if err != nil {
-			return fmt.Errorf("invalid target: %w", err)
+			return fmt.Errorf("reading targets: %w", err)
+		}
+		if len(targets) == 0 {
+			return fmt.Errorf("no targets found in input")
 		}
 
 		// --- Wordlist loading ---

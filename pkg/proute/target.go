@@ -1,7 +1,10 @@
 package proute
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"strconv"
 	"strings"
@@ -118,4 +121,125 @@ func inferScheme(port int) string {
 		return "https"
 	}
 	return "http"
+}
+
+// httpxJSONLine is the shape of a single httpx -json output object.
+type httpxJSONLine struct {
+	URL        string   `json:"url"`
+	StatusCode int      `json:"status_code"`
+	Title      string   `json:"title"`
+	Tech       []string `json:"tech"`
+}
+
+// ParseInputLine detects the input format of a single line and returns a ScanTarget.
+// Returns nil, nil for blank lines and lines beginning with '#'.
+// Supported formats:
+//   - httpx JSON:     {"url":"https://...","status_code":200,"tech":["nginx"]}
+//   - httpx standard: https://example.com [200] [Title] [nginx,php]
+//   - Plain URL:      https://example.com
+//   - Plain host:     example.com
+func ParseInputLine(line string) (*ScanTarget, error) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(line, "{") {
+		return parseHTTPXJSON(line)
+	}
+
+	// httpx standard format: URL followed by space and bracket metadata
+	if idx := strings.Index(line, " ["); idx > 0 && strings.Contains(line[:idx], "://") {
+		return parseHTTPXStandard(line, idx)
+	}
+
+	targets, err := ParseTarget(line)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	return &targets[0], nil
+}
+
+// ParseInputStream reads all newline-delimited lines from r, calling ParseInputLine
+// on each, and returns the collected targets. Blank lines and comments are skipped.
+func ParseInputStream(r io.Reader) ([]ScanTarget, error) {
+	sc := bufio.NewScanner(r)
+	var targets []ScanTarget
+	for sc.Scan() {
+		t, err := ParseInputLine(sc.Text())
+		if err != nil {
+			return nil, err
+		}
+		if t != nil {
+			targets = append(targets, *t)
+		}
+	}
+	return targets, sc.Err()
+}
+
+func parseHTTPXJSON(line string) (*ScanTarget, error) {
+	var j httpxJSONLine
+	if err := json.Unmarshal([]byte(line), &j); err != nil {
+		return nil, fmt.Errorf("invalid JSON input: %w", err)
+	}
+	if j.URL == "" {
+		return nil, fmt.Errorf("JSON line missing url field")
+	}
+	targets, err := ParseTarget(j.URL)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	t := targets[0]
+	t.Tags = j.Tech
+	return &t, nil
+}
+
+func parseHTTPXStandard(line string, splitIdx int) (*ScanTarget, error) {
+	urlPart := strings.TrimSpace(line[:splitIdx])
+	rest := line[splitIdx:]
+
+	// Collect all bracket group contents.
+	var groups []string
+	for i := 0; i < len(rest); {
+		open := strings.Index(rest[i:], "[")
+		if open < 0 {
+			break
+		}
+		open += i
+		close := strings.Index(rest[open:], "]")
+		if close < 0 {
+			break
+		}
+		close += open
+		groups = append(groups, rest[open+1:close])
+		i = close + 1
+	}
+
+	targets, err := ParseTarget(urlPart)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	t := targets[0]
+
+	// httpx standard output order: [status] [title] [tech]
+	// Extract tech from last group when 3+ groups are present.
+	if len(groups) >= 3 {
+		last := groups[len(groups)-1]
+		parts := strings.Split(last, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		t.Tags = parts
+	}
+
+	return &t, nil
 }
