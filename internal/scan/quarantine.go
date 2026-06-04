@@ -48,7 +48,7 @@ func (q *Quarantine) Check(host string) bool {
 
 // Add unconditionally quarantines host with the given reason.
 // Calling Add on an already-quarantined host is a no-op.
-func (q *Quarantine) Add(host string, reason string) {
+func (q *Quarantine) Add(host, reason string) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if _, exists := q.entries[host]; exists {

@@ -1,6 +1,7 @@
 package wordlist
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,7 +30,11 @@ type APIsGuruEntry struct {
 
 // FetchFromURL fetches a raw OpenAPI/Swagger JSON or YAML spec from any URL.
 func FetchFromURL(specURL string) ([]proute.Route, error) {
-	resp, err := OpenAPIHTTPClient.Get(specURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, specURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("openapi: build request %q: %w", specURL, err)
+	}
+	resp, err := OpenAPIHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openapi: fetch %q: %w", specURL, err)
 	}
@@ -85,7 +90,11 @@ func FetchFromAPIsGuru(apiName string) ([]proute.Route, error) {
 // ListAPIsGuru fetches the APIs.guru catalogue and returns entries matching
 // filter (case-insensitive substring on API name). Empty filter returns all.
 func ListAPIsGuru(filter string) ([]APIsGuruEntry, error) {
-	resp, err := OpenAPIHTTPClient.Get(APIsGuruListURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, APIsGuruListURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("openapi: build request for APIs.guru list: %w", err)
+	}
+	resp, err := OpenAPIHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openapi: fetch APIs.guru list: %w", err)
 	}
@@ -403,7 +412,7 @@ func resolveRef(spec map[string]interface{}, ref string) map[string]interface{} 
 		return nil
 	}
 	parts := strings.Split(strings.TrimPrefix(ref, "#/"), "/")
-	var cur interface{} = (interface{})(spec)
+	var cur interface{} = spec
 	for _, part := range parts {
 		m, ok := cur.(map[string]interface{})
 		if !ok {
@@ -537,13 +546,13 @@ func mapField(m map[string]interface{}, key string) (map[string]interface{}, boo
 	return toMap(v)
 }
 
-func boolField(m map[string]interface{}, key string) (bool, bool) {
-	v, ok := m[key]
-	if !ok {
+func boolField(m map[string]interface{}, key string) (value bool, ok bool) {
+	v, found := m[key]
+	if !found {
 		return false, false
 	}
-	b, ok := v.(bool)
-	return b, ok
+	value, ok = v.(bool)
+	return value, ok
 }
 
 func toMap(v interface{}) (map[string]interface{}, bool) {

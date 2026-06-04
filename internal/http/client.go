@@ -17,7 +17,7 @@ type ClientConfig struct {
 	UserAgent           string
 	MaxRedirects        int
 	ExtraHeaders        map[string]string
-	BlacklistDomains    []string        // do not follow redirects to these domains
+	BlacklistDomains    []string          // do not follow redirects to these domains
 	ScopeCheck          func(string) bool // if non-nil, redirects to out-of-scope hosts are blocked
 }
 

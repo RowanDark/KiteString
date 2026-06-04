@@ -150,20 +150,19 @@ func (s *Scope) IsOutOfScope(target string) bool {
 
 // FilterTargets returns only the in-scope targets and the count of skipped ones.
 // A nil Scope returns all targets with skipped=0.
-func (s *Scope) FilterTargets(targets []proute.ScanTarget) ([]proute.ScanTarget, int) {
+func (s *Scope) FilterTargets(targets []proute.ScanTarget) (inScope []proute.ScanTarget, skipped int) {
 	if s == nil {
 		return targets, 0
 	}
-	result := make([]proute.ScanTarget, 0, len(targets))
-	skipped := 0
+	inScope = make([]proute.ScanTarget, 0, len(targets))
 	for _, t := range targets {
 		if s.IsInScope(t.Host) {
-			result = append(result, t)
+			inScope = append(inScope, t)
 		} else {
 			skipped++
 		}
 	}
-	return result, skipped
+	return inScope, skipped
 }
 
 // parsePattern classifies and normalises a raw pattern string.
@@ -224,7 +223,7 @@ func (p pattern) matches(target string) bool {
 			return false
 		}
 		prefix := tl[:len(tl)-len(suffix)]
-		return len(prefix) > 0 && !strings.Contains(prefix, ".")
+		return prefix != "" && !strings.Contains(prefix, ".")
 
 	case kindDeepWild:
 		// **.example.com: one or more labels before .example.com

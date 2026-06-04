@@ -2,6 +2,7 @@ package wordlist
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,16 +24,16 @@ var SecListsHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // SecListsAliases maps short alias names to their SecLists repository paths.
 var SecListsAliases = map[string]string{
-	"api-endpoints":              "Discovery/Web-Content/api/api-endpoints.txt",
-	"api-seen-in-wild":           "Discovery/Web-Content/api/api-seen-in-wild.txt",
-	"raft-large-words":           "Discovery/Web-Content/raft-large-words.txt",
-	"raft-medium-words":          "Discovery/Web-Content/raft-medium-words.txt",
-	"raft-small-words":           "Discovery/Web-Content/raft-small-words.txt",
-	"common-api-endpoints":       "Discovery/Web-Content/common-api-endpoints-mazen160.txt",
-	"swagger-wordlist":           "Discovery/Web-Content/swagger.txt",
-	"burp-parameter-names":       "Discovery/Web-Content/burp-parameter-names.txt",
-	"dirsearch":                  "Discovery/Web-Content/dirsearch.txt",
-	"directory-list-2.3-medium":  "Discovery/Web-Content/directory-list-2.3-medium.txt",
+	"api-endpoints":             "Discovery/Web-Content/api/api-endpoints.txt",
+	"api-seen-in-wild":          "Discovery/Web-Content/api/api-seen-in-wild.txt",
+	"raft-large-words":          "Discovery/Web-Content/raft-large-words.txt",
+	"raft-medium-words":         "Discovery/Web-Content/raft-medium-words.txt",
+	"raft-small-words":          "Discovery/Web-Content/raft-small-words.txt",
+	"common-api-endpoints":      "Discovery/Web-Content/common-api-endpoints-mazen160.txt",
+	"swagger-wordlist":          "Discovery/Web-Content/swagger.txt",
+	"burp-parameter-names":      "Discovery/Web-Content/burp-parameter-names.txt",
+	"dirsearch":                 "Discovery/Web-Content/dirsearch.txt",
+	"directory-list-2.3-medium": "Discovery/Web-Content/directory-list-2.3-medium.txt",
 }
 
 // SecListEntry is a printable alias-to-path pair returned by ListSecListAliases.
@@ -62,7 +63,11 @@ func FetchSecList(alias string) ([]proute.Route, error) {
 	}
 
 	url := SecListsBaseURL + repoPath
-	resp, err := SecListsHTTPClient.Get(url)
+	fetchReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("seclists: build request %q: %w", alias, err)
+	}
+	resp, err := SecListsHTTPClient.Do(fetchReq)
 	if err != nil {
 		return nil, fmt.Errorf("seclists: fetch %q: %w", alias, err)
 	}
@@ -77,7 +82,7 @@ func FetchSecList(alias string) ([]proute.Route, error) {
 
 // CompileSecList fetches the SecLists alias and writes the compiled routes to
 // outputPath as a .ks file.
-func CompileSecList(alias string, outputPath string) error {
+func CompileSecList(alias, outputPath string) error {
 	routes, err := FetchSecList(alias)
 	if err != nil {
 		return err

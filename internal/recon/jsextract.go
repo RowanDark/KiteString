@@ -13,10 +13,10 @@ import (
 
 var (
 	// REST path patterns matched from string literals.
-	reRESTAPIv  = regexp.MustCompile(`["'` + "`" + `](/api/v\d+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
-	reRESTv     = regexp.MustCompile(`["'` + "`" + `](/v\d+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
-	reAPIBase   = regexp.MustCompile(`["'` + "`" + `]((?:/api|/rest|/service|/_api)/[a-zA-Z0-9/_-]+)["'` + "`" + `]`)
-	reGraphQL   = regexp.MustCompile(`["'` + "`" + `](/(?:graphql|gql)(?:/[a-zA-Z0-9/_-]*)?)["'` + "`" + `]`)
+	reRESTAPIv = regexp.MustCompile(`["'` + "`" + `](/api/v\d+/[a-z][a-z\d/_-]*)["'` + "`" + `]`)
+	reRESTv    = regexp.MustCompile(`["'` + "`" + `](/v\d+/[a-z][a-z\d/_-]*)["'` + "`" + `]`)
+	reAPIBase  = regexp.MustCompile(`["'` + "`" + `]((?:/api|/rest|/service|/_api)/[a-zA-Z0-9/_-]+)["'` + "`" + `]`)
+	reGraphQL  = regexp.MustCompile(`["'` + "`" + `](/(?:graphql|gql)(?:/[a-zA-Z0-9/_-]*)?)["'` + "`" + `]`)
 
 	// fetch() — default GET.
 	reFetch = regexp.MustCompile(`fetch\s*\(\s*["` + "`" + `']([^"` + "`" + `'\s]+)["` + "`" + `']`)

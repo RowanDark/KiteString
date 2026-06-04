@@ -395,10 +395,15 @@ func TestNewProxyClient_ThroughProxy(t *testing.T) {
 		t.Fatalf("NewProxyClient: %v", err)
 	}
 
-	_, err = client.Get(target.URL + "/check")
+	resp, err := http.NewRequestWithContext(context.Background(), http.MethodGet, target.URL+"/check", http.NoBody)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	getResp, err := client.Do(resp)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}
+	getResp.Body.Close()
 
 	targetParsed, _ := url.Parse(target.URL)
 	if proxiedHost != targetParsed.Host {
@@ -409,7 +414,7 @@ func TestNewProxyClient_ThroughProxy(t *testing.T) {
 // --- formatRawRequest tests ---
 
 func TestFormatRawRequest(t *testing.T) {
-	req, _ := http.NewRequest("POST", "https://example.com/api/v1/items", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "https://example.com/api/v1/items", http.NoBody)
 	req.Header.Set("Content-Type", "application/json")
 
 	body := []byte(`{"key":"value"}`)

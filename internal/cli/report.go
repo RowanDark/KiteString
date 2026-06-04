@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/spf13/cobra"
+
+	ksoutput "github.com/RowanDark/kitestring/internal/output"
 )
 
 var reportCmd = &cobra.Command{
