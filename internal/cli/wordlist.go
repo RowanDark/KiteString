@@ -29,10 +29,10 @@ var wordlistSeclistsListCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		entries := wordlist.ListSecListAliases()
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ALIAS\tSECLISTS PATH")
-		fmt.Fprintln(w, "-----\t-------------")
+		fmt.Fprintln(w, "ALIAS\tSECLISTS PATH\tSTATUS")
+		fmt.Fprintln(w, "-----\t-------------\t------")
 		for _, e := range entries {
-			fmt.Fprintf(w, "%s\t%s\n", e.Alias, e.RepoPath)
+			fmt.Fprintf(w, "%s\t%s\t%s\n", e.Alias, e.RepoPath, e.Status)
 		}
 		return w.Flush()
 	},
@@ -52,15 +52,25 @@ Examples:
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		all, _ := cmd.Flags().GetBool("all")
+		continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
 
 		if all {
+			var failed []string
 			for _, e := range wordlist.ListSecListAliases() {
 				fmt.Printf("Fetching %s ...\n", e.Alias)
 				path, err := wordlist.ResolveSecList(e.Alias)
 				if err != nil {
+					if continueOnError {
+						fmt.Fprintf(os.Stderr, "  warning: %v\n", err)
+						failed = append(failed, e.Alias)
+						continue
+					}
 					return err
 				}
 				fmt.Printf("  Saved → %s\n", path)
+			}
+			if len(failed) > 0 {
+				fmt.Fprintf(os.Stderr, "\nSkipped %d alias(es): %s\n", len(failed), strings.Join(failed, ", "))
 			}
 			return nil
 		}
@@ -295,6 +305,7 @@ func init() {
 	wordlistCompileCmd.Flags().StringP("output", "o", "", "output .ks file path (default: <input>.ks)")
 
 	wordlistSeclistsFetchCmd.Flags().Bool("all", false, "fetch and compile all defined SecLists aliases")
+	wordlistSeclistsFetchCmd.Flags().Bool("continue-on-error", false, "skip failed aliases and continue rather than halting")
 
 	wordlistOpenAPIFetchCmd.Flags().String("url", "", "URL of an OpenAPI/Swagger JSON or YAML spec")
 	wordlistOpenAPIFetchCmd.Flags().String("file", "", "path to a local OpenAPI/Swagger spec file")

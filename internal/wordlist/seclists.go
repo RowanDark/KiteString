@@ -24,29 +24,39 @@ var SecListsHTTPClient = &http.Client{Timeout: 60 * time.Second}
 
 // SecListsAliases maps short alias names to their SecLists repository paths.
 var SecListsAliases = map[string]string{
-	"api-endpoints":             "Discovery/Web-Content/api/api-endpoints.txt",
-	"api-seen-in-wild":          "Discovery/Web-Content/api/api-seen-in-wild.txt",
-	"raft-large-words":          "Discovery/Web-Content/raft-large-words.txt",
-	"raft-medium-words":         "Discovery/Web-Content/raft-medium-words.txt",
-	"raft-small-words":          "Discovery/Web-Content/raft-small-words.txt",
-	"common-api-endpoints":      "Discovery/Web-Content/common-api-endpoints-mazen160.txt",
-	"swagger-wordlist":          "Discovery/Web-Content/swagger.txt",
-	"burp-parameter-names":      "Discovery/Web-Content/burp-parameter-names.txt",
-	"dirsearch":                 "Discovery/Web-Content/dirsearch.txt",
-	"directory-list-2.3-medium": "Discovery/Web-Content/directory-list-2.3-medium.txt",
+	"api-endpoints":        "Discovery/Web-Content/api/api-endpoints.txt",
+	"api-seen-in-wild":     "Discovery/Web-Content/api/api-seen-in-wild.txt",
+	"raft-large-words":     "Discovery/Web-Content/raft-large-words.txt",
+	"raft-medium-words":    "Discovery/Web-Content/raft-medium-words.txt",
+	"raft-small-words":     "Discovery/Web-Content/raft-small-words.txt",
+	"common-api-endpoints": "Discovery/Web-Content/common-api-endpoints-mazen160.txt",
+	"swagger-wordlist":     "Discovery/Web-Content/swagger.txt",
+	"burp-parameter-names": "Discovery/Web-Content/burp-parameter-names.txt",
+	"dirsearch":            "Discovery/Web-Content/dirsearch.txt",
+	"combined-directories": "Discovery/Web-Content/combined_directories.txt",
+	"combined-words":       "Discovery/Web-Content/combined_words.txt",
 }
 
 // SecListEntry is a printable alias-to-path pair returned by ListSecListAliases.
 type SecListEntry struct {
 	Alias    string
 	RepoPath string
+	Status   string // "ok" if locally cached, "unverified" otherwise
 }
 
 // ListSecListAliases returns all defined SecLists aliases as a sorted slice.
+// Status is set to "ok" if the compiled .ks file is already in the local cache.
 func ListSecListAliases() []SecListEntry {
+	cacheDir, _ := getCacheDir()
 	entries := make([]SecListEntry, 0, len(SecListsAliases))
 	for alias, path := range SecListsAliases {
-		entries = append(entries, SecListEntry{Alias: alias, RepoPath: path})
+		status := "unverified"
+		if cacheDir != "" {
+			if _, err := os.Stat(filepath.Join(cacheDir, "sl-"+alias+".ks")); err == nil {
+				status = "ok"
+			}
+		}
+		entries = append(entries, SecListEntry{Alias: alias, RepoPath: path, Status: status})
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Alias < entries[j].Alias
@@ -73,6 +83,9 @@ func FetchSecList(alias string) ([]proute.Route, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("seclists: alias %q not found at %s (HTTP 404) — run: ks wordlist seclists list", alias, url)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("seclists: fetch %q: HTTP %d from %s", alias, resp.StatusCode, url)
 	}

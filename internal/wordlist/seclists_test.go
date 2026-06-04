@@ -101,6 +101,36 @@ func TestFetchSecList_HTTPError(t *testing.T) {
 	}
 }
 
+func TestFetchSecList_404ErrorMessage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	restore := patchSecLists(t, srv, map[string]string{
+		"gone-alias": "gone.txt",
+	})
+	defer restore()
+
+	_, err := FetchSecList("gone-alias")
+	if err == nil {
+		t.Fatal("expected error on HTTP 404, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "gone-alias") {
+		t.Errorf("error should contain alias name, got: %v", msg)
+	}
+	if !strings.Contains(msg, "HTTP 404") {
+		t.Errorf("error should mention HTTP 404, got: %v", msg)
+	}
+	if !strings.Contains(msg, "ks wordlist seclists list") {
+		t.Errorf("error should suggest 'ks wordlist seclists list', got: %v", msg)
+	}
+	if !strings.Contains(msg, srv.URL) {
+		t.Errorf("error should contain attempted URL, got: %v", msg)
+	}
+}
+
 func TestCompileSecList_ProducesReadableKSFile(t *testing.T) {
 	body := "/health\n/metrics\n/status\n"
 
@@ -174,10 +204,42 @@ func TestListSecListAliases_ContainsExpected(t *testing.T) {
 			t.Errorf("alias %q has empty repo path", e.Alias)
 		}
 	}
-	for _, expected := range []string{"api-endpoints", "raft-medium-words", "dirsearch"} {
+	for _, expected := range []string{
+		"api-endpoints", "raft-medium-words", "dirsearch",
+		"combined-directories", "combined-words",
+	} {
 		if !found[expected] {
 			t.Errorf("expected alias %q in list", expected)
 		}
+	}
+	if found["directory-list-2.3-medium"] {
+		t.Error("deprecated alias 'directory-list-2.3-medium' should not be in list")
+	}
+}
+
+func TestListSecListAliases_StatusField(t *testing.T) {
+	dir := t.TempDir()
+	origCacheDir := CacheDirOverride
+	CacheDirOverride = dir
+	defer func() { CacheDirOverride = origCacheDir }()
+
+	alias := "raft-small-words"
+	cachedPath := filepath.Join(dir, "sl-"+alias+".ks")
+	if err := os.WriteFile(cachedPath, []byte("sentinel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := ListSecListAliases()
+	statusByAlias := make(map[string]string, len(entries))
+	for _, e := range entries {
+		statusByAlias[e.Alias] = e.Status
+	}
+
+	if statusByAlias[alias] != "ok" {
+		t.Errorf("cached alias should have status 'ok', got %q", statusByAlias[alias])
+	}
+	if statusByAlias["api-endpoints"] != "unverified" {
+		t.Errorf("uncached alias should have status 'unverified', got %q", statusByAlias["api-endpoints"])
 	}
 }
 
