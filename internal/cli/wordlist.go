@@ -15,8 +15,9 @@ import (
 )
 
 var wordlistSeclistsCmd = &cobra.Command{
-	Use:   "seclists",
-	Short: "Fetch and compile SecLists wordlists",
+	Use:     "seclists",
+	Aliases: []string{"sl"},
+	Short:   "Fetch and compile SecLists wordlists",
 	Long: `Fetch wordlists from the SecLists GitHub repository and compile them
 to .ks format for use with ks scan and ks brute.`,
 }
@@ -79,8 +80,9 @@ Examples:
 }
 
 var wordlistCmd = &cobra.Command{
-	Use:   "wordlist",
-	Short: "Wordlist management",
+	Use:     "wordlist",
+	Aliases: []string{"wl", "w"},
+	Short:   "Wordlist management",
 	Long: `Manage KiteString wordlists (.ks format).
 
 Subcommands allow listing available wordlists, pulling the latest curated
@@ -89,8 +91,9 @@ optimized .ks binary format.`,
 }
 
 var wordlistListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List available wordlists",
+	Use:     "list",
+	Aliases: []string{"ls", "l"},
+	Short:   "List available wordlists",
 	Long: `List all wordlists available on the CDN and their local cached status.
 
 Displays alias, route count, compressed size, and whether the wordlist is
@@ -127,8 +130,9 @@ already cached in ~/.cache/kitestring/wordlists/.`,
 }
 
 var wordlistUpdateCmd = &cobra.Command{
-	Use:   "update [alias...]",
-	Short: "Pull latest .ks wordlists from GitHub CDN",
+	Use:     "update [alias...]",
+	Aliases: []string{"up", "u"},
+	Short:   "Pull latest .ks wordlists from GitHub CDN",
 	Long: `Download curated .ks wordlist files from the KiteString GitHub release CDN.
 
 Without arguments all manifest entries are downloaded. Pass one or more alias
@@ -146,8 +150,9 @@ Examples:
 }
 
 var wordlistCompileCmd = &cobra.Command{
-	Use:   "compile [file]",
-	Short: "Compile .txt or .json into .ks format",
+	Use:     "compile [file]",
+	Aliases: []string{"c"},
+	Short:   "Compile .txt or .json into .ks format",
 	Long: `Compile a plain-text (.txt) or JSON (.json) wordlist into the optimized
 .ks binary format for faster loading and deduplication.
 
@@ -164,8 +169,9 @@ Example:
 // ---------- openapi subcommand tree ----------
 
 var wordlistOpenAPICmd = &cobra.Command{
-	Use:   "openapi",
-	Short: "Ingest live OpenAPI/Swagger specs",
+	Use:     "openapi",
+	Aliases: []string{"oa"},
+	Short:   "Ingest live OpenAPI/Swagger specs",
 	Long: `Fetch and compile OpenAPI/Swagger specs into .ks wordlists, or search the
 APIs.guru catalogue for publicly available specs.`,
 }

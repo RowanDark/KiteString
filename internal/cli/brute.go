@@ -16,8 +16,9 @@ import (
 )
 
 var bruteCmd = &cobra.Command{
-	Use:   "brute [url]",
-	Short: "Traditional path/directory fuzzing",
+	Use:     "brute [url]",
+	Aliases: []string{"b", "fuzz"},
+	Short:   "Traditional path/directory fuzzing",
 	Long: `Brute-force paths and directories against a target URL using a wordlist.
 
 Unlike 'ks scan', brute mode does not perform context analysis — it sends
@@ -230,7 +231,7 @@ func init() {
 	bruteCmd.Flags().Duration("backoff-base", 5*time.Second, "base duration for exponential backoff on 429")
 	bruteCmd.Flags().Duration("backoff-max", 60*time.Second, "maximum backoff ceiling")
 	bruteCmd.Flags().Int("unreachable-threshold", 5, "consecutive connection failures before marking a host unreachable")
-	bruteCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
+	bruteCmd.Flags().StringP("proxy", "P", "", "HTTP proxy URL")
 
 	// Filter flags
 	bruteCmd.Flags().IntSlice("fail-status-codes", nil, "status codes to suppress (e.g. 404,403); comma-separated")
@@ -252,11 +253,11 @@ func init() {
 	bruteCmd.Flags().Bool("wildcard-detection", true, "detect and quarantine wildcard routing hosts")
 
 	// Report generation
-	bruteCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, or html")
+	bruteCmd.Flags().StringP("report", "R", "", "auto-generate report on completion: md, markdown, or html")
 
 	// Misc
 	bruteCmd.Flags().String("filter-api", "", "only report routes matching this KSUID")
 
 	// Profile
-	bruteCmd.Flags().String("profile", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
+	bruteCmd.Flags().StringP("profile", "p", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
 }

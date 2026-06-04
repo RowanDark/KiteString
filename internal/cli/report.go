@@ -9,8 +9,9 @@ import (
 )
 
 var reportCmd = &cobra.Command{
-	Use:   "report",
-	Short: "Generate Markdown or HTML report from scan results",
+	Use:     "report",
+	Aliases: []string{"rp"},
+	Short:   "Generate Markdown or HTML report from scan results",
 	Long: `Generate a structured report from a JSONL results file.
 
 Reports are formatted for bug bounty submission workflows: each finding

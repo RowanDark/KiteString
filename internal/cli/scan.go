@@ -18,8 +18,9 @@ import (
 )
 
 var scanCmd = &cobra.Command{
-	Use:   "scan [url]",
-	Short: "Context-aware API endpoint discovery",
+	Use:     "scan [url]",
+	Aliases: []string{"s"},
+	Short:   "Context-aware API endpoint discovery",
 	Long: `Scan a target URL for API endpoints using context-aware analysis.
 
 KiteString sends routes with correct HTTP methods, headers, parameters, and
@@ -495,7 +496,7 @@ func init() {
 	scanCmd.Flags().StringArrayP("wordlist-alias", "A", nil, "cached wordlist alias (e.g. apiroutes or apiroutes:20000); repeatable")
 	scanCmd.Flags().Int("head", 0, "use only the first N routes from each wordlist (0 = all)")
 	scanCmd.Flags().StringP("seclists", "S", "", "SecLists alias to fetch on demand (e.g. api-endpoints)")
-	scanCmd.Flags().String("openapi-url", "", "fetch OpenAPI/Swagger spec from URL at scan time")
+	scanCmd.Flags().StringP("openapi-url", "O", "", "fetch OpenAPI/Swagger spec from URL at scan time")
 	scanCmd.Flags().String("openapi-file", "", "load local OpenAPI/Swagger spec file at scan time")
 
 	// Connection & timing flags
@@ -507,7 +508,7 @@ func init() {
 	scanCmd.Flags().Duration("backoff-base", 5*time.Second, "base duration for exponential backoff on 429")
 	scanCmd.Flags().Duration("backoff-max", 60*time.Second, "maximum backoff ceiling")
 	scanCmd.Flags().Int("unreachable-threshold", 5, "consecutive connection failures before marking a host unreachable")
-	scanCmd.Flags().StringP("proxy", "p", "", "HTTP proxy URL")
+	scanCmd.Flags().StringP("proxy", "P", "", "HTTP proxy URL")
 
 	// Filter flags
 	scanCmd.Flags().IntSlice("fail-status-codes", nil, "status codes to suppress (e.g. 404,403); comma-separated")
@@ -517,7 +518,7 @@ func init() {
 	// Request flags
 	scanCmd.Flags().StringArrayP("header", "H", nil, "extra request header 'Key: Value'; repeatable")
 	scanCmd.Flags().String("user-agent", "KiteString/1.0", "custom User-Agent string")
-	scanCmd.Flags().BoolP("follow-redirects", "r", true, "follow HTTP redirects")
+	scanCmd.Flags().Bool("follow-redirects", true, "follow HTTP redirects")
 	scanCmd.Flags().Int("max-redirects", 3, "maximum redirects to follow (when --follow-redirects is true)")
 	scanCmd.Flags().StringArray("blacklist-domain", nil, "do not follow redirects to these domains; repeatable")
 	scanCmd.Flags().String("force-method", "", "override HTTP method for all routes")
@@ -537,27 +538,27 @@ func init() {
 	scanCmd.Flags().Bool("disable-similarity", false, "skip body similarity scoring (faster, but may produce false positives on templated 200 responses)")
 
 	// JS extraction flags
-	scanCmd.Flags().Bool("js-extract", false, "fetch root page, parse <script> tags, and add extracted routes to scan queue")
+	scanCmd.Flags().BoolP("js-extract", "J", false, "fetch root page, parse <script> tags, and add extracted routes to scan queue")
 	scanCmd.Flags().Int("js-depth", 1, "pages deep to crawl looking for script tags (1 = root page only)")
 
 	// Scope flags
-	scanCmd.Flags().String("scope-file", "", "path to scope file (lines: *.example.com, !exclude.com, 192.168.1.0/24)")
+	scanCmd.Flags().StringP("scope-file", "s", "", "path to scope file (lines: *.example.com, !exclude.com, 192.168.1.0/24)")
 	scanCmd.Flags().StringArray("scope", nil, "inline include pattern (e.g. *.example.com); repeatable")
 	scanCmd.Flags().StringArray("exclude", nil, "inline exclude pattern (e.g. staging.example.com); repeatable")
 	scanCmd.Flags().Bool("skip-out-of-scope", false, "silently skip out-of-scope targets (default when scope is defined)")
 	scanCmd.Flags().Bool("warn-out-of-scope", false, "log a warning for each out-of-scope target or redirect instead of silently skipping")
 
 	// Report generation
-	scanCmd.Flags().String("report", "", "auto-generate report on completion: md, markdown, or html")
+	scanCmd.Flags().StringP("report", "R", "", "auto-generate report on completion: md, markdown, or html")
 
 	// Checkpoint / resume flags
-	scanCmd.Flags().String("checkpoint", "", "path to checkpoint file; creates a new scan or resumes an existing one")
-	scanCmd.Flags().String("resume", "", "alias for --checkpoint that explicitly signals resume intent")
+	scanCmd.Flags().StringP("checkpoint", "c", "", "path to checkpoint file; creates a new scan or resumes an existing one")
+	scanCmd.Flags().StringP("resume", "r", "", "alias for --checkpoint that explicitly signals resume intent")
 	scanCmd.Flags().Int("checkpoint-interval", 500, "save checkpoint every N completed requests")
 
 	// Misc
 	scanCmd.Flags().IntP("depth", "d", 2, "crawl depth for context discovery")
 
 	// Profile
-	scanCmd.Flags().String("profile", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
+	scanCmd.Flags().StringP("profile", "p", "", "load settings from a named profile in the config file (~/.kitestring.yaml)")
 }
