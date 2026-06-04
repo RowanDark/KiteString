@@ -6,8 +6,9 @@ import (
 	"io"
 	"os"
 
-	"github.com/RowanDark/kitestring/pkg/proute"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/RowanDark/kitestring/pkg/proute"
 )
 
 const CurrentVersion uint32 = 1

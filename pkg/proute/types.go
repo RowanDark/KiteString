@@ -119,15 +119,15 @@ func ParseLengthRange(s string) (LengthRange, error) {
 	if idx := strings.Index(s, "-"); idx > 0 {
 		minStr := s[:idx]
 		maxStr := s[idx+1:]
-		min, err := strconv.Atoi(minStr)
+		minVal, err := strconv.Atoi(minStr)
 		if err != nil {
 			return LengthRange{}, fmt.Errorf("invalid range min %q: %w", minStr, err)
 		}
-		max, err := strconv.Atoi(maxStr)
+		maxVal, err := strconv.Atoi(maxStr)
 		if err != nil {
 			return LengthRange{}, fmt.Errorf("invalid range max %q: %w", maxStr, err)
 		}
-		return LengthRange{Min: min, Max: max}, nil
+		return LengthRange{Min: minVal, Max: maxVal}, nil
 	}
 	n, err := strconv.Atoi(s)
 	if err != nil {

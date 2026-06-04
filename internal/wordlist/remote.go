@@ -1,6 +1,7 @@
 package wordlist
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,8 +29,8 @@ var (
 
 // Manifest is the top-level structure of wordlists/manifest.json.
 type Manifest struct {
-	Version   int            `json:"version"`
-	UpdatedAt string         `json:"updated_at"`
+	Version   int             `json:"version"`
+	UpdatedAt string          `json:"updated_at"`
 	Wordlists []WordlistEntry `json:"wordlists"`
 }
 
@@ -52,7 +53,11 @@ type CachedWordlist struct {
 
 // FetchManifest downloads and parses the remote manifest.
 func FetchManifest() (*Manifest, error) {
-	resp, err := HTTPClient.Get(ManifestURL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, ManifestURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("wordlist: build manifest request: %w", err)
+	}
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("wordlist: fetch manifest: %w", err)
 	}
@@ -198,7 +203,11 @@ func filterByAlias(entries []WordlistEntry, aliases []string) []WordlistEntry {
 }
 
 func downloadWithProgress(url, dest string) error {
-	resp, err := HTTPClient.Get(url)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return err
+	}
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

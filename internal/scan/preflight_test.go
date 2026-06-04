@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -86,7 +87,11 @@ func TestBuildBaselines_WildcardHost(t *testing.T) {
 	}
 
 	// A real request to any path should be identified as a wildcard match.
-	resp, err := srv.Client().Get(srv.URL + "/api/users")
+	wcReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/api/users", http.NoBody)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := srv.Client().Do(wcReq)
 	if err != nil {
 		t.Fatalf("Get /api/users: %v", err)
 	}
@@ -128,7 +133,11 @@ func TestBuildBaselines_SpecificRoutes(t *testing.T) {
 	}
 
 	// A request to the real route returns 200 — must NOT be flagged as wildcard.
-	resp, err := srv.Client().Get(srv.URL + "/api/users")
+	specReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL+"/api/users", http.NoBody)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	resp, err := srv.Client().Do(specReq)
 	if err != nil {
 		t.Fatalf("Get /api/users: %v", err)
 	}

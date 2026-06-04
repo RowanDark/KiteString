@@ -212,13 +212,13 @@ func parseHTTPXStandard(line string, splitIdx int) (*ScanTarget, error) {
 			break
 		}
 		open += i
-		close := strings.Index(rest[open:], "]")
-		if close < 0 {
+		closeIdx := strings.Index(rest[open:], "]")
+		if closeIdx < 0 {
 			break
 		}
-		close += open
-		groups = append(groups, rest[open+1:close])
-		i = close + 1
+		closeIdx += open
+		groups = append(groups, rest[open+1:closeIdx])
+		i = closeIdx + 1
 	}
 
 	targets, err := ParseTarget(urlPart)

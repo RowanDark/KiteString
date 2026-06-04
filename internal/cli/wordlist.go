@@ -8,10 +8,11 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/ksfile"
 	"github.com/RowanDark/kitestring/pkg/proute"
-	"github.com/spf13/cobra"
 )
 
 var wordlistSeclistsCmd = &cobra.Command{

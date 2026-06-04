@@ -1,0 +1,42 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - gocritic
+    - noctx
+    - bodyclose
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/RowanDark/kitestring
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+    disabled-checks:
+      - appendAssign
+      - hugeParam
+
+issues:
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+        - gocritic
+    - path: "\\.pb\\.go"
+      linters:
+        - all
+  max-issues-per-linter: 50
+  max-same-issues: 10
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly

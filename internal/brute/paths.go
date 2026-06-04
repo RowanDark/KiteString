@@ -4,7 +4,7 @@ import "strings"
 
 // ExpandExtensions appends each extension to each path, returning one variant per extension per path.
 // Extensions without a leading dot have one added automatically.
-func ExpandExtensions(paths []string, extensions []string) []string {
+func ExpandExtensions(paths, extensions []string) []string {
 	if len(extensions) == 0 {
 		return paths
 	}
@@ -22,7 +22,7 @@ func ExpandExtensions(paths []string, extensions []string) []string {
 
 // ExpandDirsearch substitutes the %EXT% placeholder in paths with each extension value.
 // Paths without %EXT% are passed through unchanged.
-func ExpandDirsearch(paths []string, extensions []string) []string {
+func ExpandDirsearch(paths, extensions []string) []string {
 	result := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if strings.Contains(p, "%EXT%") {

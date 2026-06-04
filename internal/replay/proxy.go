@@ -1,8 +1,10 @@
 package replay
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	nethttp "net/http"
 	neturl "net/url"
 
@@ -19,7 +21,7 @@ func NewProxyClient(proxyURL string, tlsSkipVerify bool) (*nethttp.Client, error
 		return nil, fmt.Errorf("parse proxy URL: %w", err)
 	}
 
-	tlsCfg := &tls.Config{ //nolint:gosec
+	tlsCfg := &tls.Config{ //nolint:gosec // InsecureSkipVerify is required for interception proxies like Burp Suite; value is user-controlled
 		InsecureSkipVerify: tlsSkipVerify,
 	}
 
@@ -45,8 +47,13 @@ func NewProxyClient(proxyURL string, tlsSkipVerify bool) (*nethttp.Client, error
 		if dialErr != nil {
 			return nil, fmt.Errorf("create SOCKS5 dialer: %w", dialErr)
 		}
+		contextDialer, ok := dialer.(proxy.ContextDialer)
+		if !ok {
+			// Wrap the legacy Dial func in a ContextDialer-compatible closure.
+			contextDialer = &dialerContextAdapter{dialer}
+		}
 		transport = &nethttp.Transport{
-			Dial:            dialer.Dial,
+			DialContext:     contextDialer.DialContext,
 			TLSClientConfig: tlsCfg,
 		}
 
@@ -55,4 +62,30 @@ func NewProxyClient(proxyURL string, tlsSkipVerify bool) (*nethttp.Client, error
 	}
 
 	return &nethttp.Client{Transport: transport}, nil
+}
+
+// dialerContextAdapter wraps a legacy proxy.Dialer to implement proxy.ContextDialer.
+type dialerContextAdapter struct {
+	d proxy.Dialer
+}
+
+func (a *dialerContextAdapter) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Run the blocking dial in a goroutine so context cancellation is respected.
+	ch := make(chan struct {
+		conn net.Conn
+		err  error
+	}, 1)
+	go func() {
+		conn, err := a.d.Dial(network, addr)
+		ch <- struct {
+			conn net.Conn
+			err  error
+		}{conn, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-ch:
+		return res.conn, res.err
+	}
 }

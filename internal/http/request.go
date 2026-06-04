@@ -115,7 +115,7 @@ func (r *Request) toHTTPRequest() (*nethttp.Request, error) {
 	if bodyBytes != nil {
 		req, err = nethttp.NewRequest(r.Method, r.FullURL, bodyBytes)
 	} else {
-		req, err = nethttp.NewRequest(r.Method, r.FullURL, nil)
+		req, err = nethttp.NewRequest(r.Method, r.FullURL, nethttp.NoBody)
 	}
 	if err != nil {
 		return nil, err

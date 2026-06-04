@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RowanDark/kitestring/internal/replay"
 	"github.com/spf13/cobra"
+
+	"github.com/RowanDark/kitestring/internal/replay"
 )
 
 var replayCmd = &cobra.Command{

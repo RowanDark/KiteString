@@ -145,8 +145,8 @@ func seededHash(s string, seed uint64) uint64 {
 	for j := 0; j < 8; j++ {
 		buf[j] = byte(seed >> (uint(j) * 8))
 	}
-	h.Write(buf[:])  //nolint:errcheck
-	h.Write([]byte(s)) //nolint:errcheck
+	h.Write(buf[:])    //nolint:errcheck // hash.Hash.Write never returns an error
+	h.Write([]byte(s)) //nolint:errcheck // hash.Hash.Write never returns an error
 	return h.Sum64()
 }
 

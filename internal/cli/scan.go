@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/RowanDark/kitestring/internal/config"
 	"github.com/RowanDark/kitestring/internal/input"
 	ksoutput "github.com/RowanDark/kitestring/internal/output"
@@ -14,7 +16,6 @@ import (
 	"github.com/RowanDark/kitestring/internal/scope"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
-	"github.com/spf13/cobra"
 )
 
 var scanCmd = &cobra.Command{

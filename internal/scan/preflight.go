@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ type Baseline struct {
 // and records the baseline status and content length.
 func CheckHost(target proute.ScanTarget, client *http.Client) (*HostProfile, error) {
 	url := buildTargetURL(target, "/")
-	req, err := http.NewRequest(http.MethodHead, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodHead, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build head request: %w", err)
 	}
@@ -44,7 +45,7 @@ func CheckHost(target proute.ScanTarget, client *http.Client) (*HostProfile, err
 	if err != nil {
 		return nil, fmt.Errorf("host unreachable %s: %w", target.Host, err)
 	}
-	io.Copy(io.Discard, resp.Body) //nolint:errcheck
+	io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain; error is irrelevant for HEAD response
 	resp.Body.Close()
 
 	cl := resp.ContentLength
@@ -69,7 +70,7 @@ func BuildBaselines(target proute.ScanTarget, routes []proute.Route, depth int, 
 		probe := strings.TrimSuffix(prefix, "/") + "/" + randomSuffix(16)
 		url := buildTargetURL(target, probe)
 
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 		if err != nil {
 			continue
 		}

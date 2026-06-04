@@ -125,7 +125,7 @@ func TestWildcardSingleLevel(t *testing.T) {
 		{"api.example.com", true},
 		{"staging.example.com", true},
 		{"foo.bar.example.com", false}, // two levels — not matched by *.
-		{"example.com", false},          // no subdomain
+		{"example.com", false},         // no subdomain
 		{"notexample.com", false},
 	}
 	for _, tt := range tests {
@@ -144,7 +144,7 @@ func TestDeepWildcard(t *testing.T) {
 		{"foo.example.com", true},
 		{"foo.bar.example.com", true},
 		{"deep.nested.foo.example.com", true},
-		{"example.com", false},   // the domain itself is not matched
+		{"example.com", false}, // the domain itself is not matched
 		{"other.com", false},
 	}
 	for _, tt := range tests {
@@ -229,7 +229,7 @@ api.example.com
 	}{
 		{"api.example.com", true},
 		{"www.example.com", true},
-		{"staging.example.com", false},    // explicitly excluded
+		{"staging.example.com", false},     // explicitly excluded
 		{"db.internal.example.com", false}, // excluded via *.internal.example.com
 		{"192.168.1.50", true},
 		{"192.168.2.1", false},

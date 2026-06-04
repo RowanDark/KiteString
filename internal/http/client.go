@@ -17,7 +17,7 @@ type ClientConfig struct {
 	UserAgent           string
 	MaxRedirects        int
 	ExtraHeaders        map[string]string
-	BlacklistDomains    []string        // do not follow redirects to these domains
+	BlacklistDomains    []string          // do not follow redirects to these domains
 	ScopeCheck          func(string) bool // if non-nil, redirects to out-of-scope hosts are blocked
 }
 
@@ -41,7 +41,7 @@ func NewClient(cfg ClientConfig) *Client {
 
 	transport := &nethttp.Transport{
 		MaxIdleConnsPerHost: cfg.MaxIdleConnsPerHost,
-		TLSClientConfig: &tls.Config{ //nolint:gosec
+		TLSClientConfig: &tls.Config{ //nolint:gosec // InsecureSkipVerify is intentionally configurable for user-supplied targets
 			InsecureSkipVerify: cfg.SkipTLSVerify,
 		},
 	}

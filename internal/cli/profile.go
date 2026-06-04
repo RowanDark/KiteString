@@ -8,8 +8,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/RowanDark/kitestring/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/RowanDark/kitestring/internal/config"
 )
 
 var profileCmd = &cobra.Command{
@@ -76,7 +77,7 @@ var profileShowCmd = &cobra.Command{
 	Use:     "show <name>",
 	Aliases: []string{"s"},
 	Short:   "Show the fully resolved config for a profile (defaults merged in)",
-	Args:  cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadActiveConfig()
 		if err != nil {

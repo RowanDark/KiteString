@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -319,7 +320,7 @@ func TestNewProxyClient_HTTP(t *testing.T) {
 		t.Error("expected Proxy to be set on transport")
 	}
 	// Verify proxy URL is correct
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "GET", "http://example.com", http.NoBody)
 	proxyURL, _ := transport.Proxy(req)
 	if proxyURL == nil {
 		t.Fatal("proxy function returned nil URL")
@@ -352,8 +353,8 @@ func TestNewProxyClient_SOCKS5(t *testing.T) {
 	if !ok {
 		t.Fatal("expected *http.Transport")
 	}
-	if transport.Dial == nil {
-		t.Error("expected Dial to be set for SOCKS5 transport")
+	if transport.DialContext == nil {
+		t.Error("expected DialContext to be set for SOCKS5 transport")
 	}
 }
 
@@ -394,10 +395,15 @@ func TestNewProxyClient_ThroughProxy(t *testing.T) {
 		t.Fatalf("NewProxyClient: %v", err)
 	}
 
-	_, err = client.Get(target.URL + "/check")
+	resp, err := http.NewRequestWithContext(context.Background(), http.MethodGet, target.URL+"/check", http.NoBody)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	getResp, err := client.Do(resp)
 	if err != nil {
 		t.Fatalf("GET through proxy: %v", err)
 	}
+	getResp.Body.Close()
 
 	targetParsed, _ := url.Parse(target.URL)
 	if proxiedHost != targetParsed.Host {
@@ -408,7 +414,7 @@ func TestNewProxyClient_ThroughProxy(t *testing.T) {
 // --- formatRawRequest tests ---
 
 func TestFormatRawRequest(t *testing.T) {
-	req, _ := http.NewRequest("POST", "https://example.com/api/v1/items", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), "POST", "https://example.com/api/v1/items", http.NoBody)
 	req.Header.Set("Content-Type", "application/json")
 
 	body := []byte(`{"key":"value"}`)

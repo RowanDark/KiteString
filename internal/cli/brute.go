@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/RowanDark/kitestring/internal/brute"
 	"github.com/RowanDark/kitestring/internal/config"
 	"github.com/RowanDark/kitestring/internal/input"
 	ksoutput "github.com/RowanDark/kitestring/internal/output"
 	"github.com/RowanDark/kitestring/internal/wordlist"
 	"github.com/RowanDark/kitestring/pkg/proute"
-	"github.com/spf13/cobra"
 )
 
 var bruteCmd = &cobra.Command{
