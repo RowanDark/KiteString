@@ -1,0 +1,125 @@
+name: Update Wordlists
+
+on:
+  workflow_dispatch:
+    inputs:
+      aliases:
+        description: "Comma-separated wordlist aliases to rebuild (leave blank for all)"
+        required: false
+        default: ""
+  schedule:
+    # First day of every month at 02:00 UTC
+    - cron: "0 2 1 * *"
+
+permissions:
+  contents: write
+
+jobs:
+  update-wordlists:
+    name: Fetch and compile wordlists
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build ks binary
+        run: go build -o bin/ks ./cmd/ks
+
+      - name: Fetch and compile wordlists from APIs.guru
+        run: |
+          mkdir -p dist/wordlists
+
+          # Fetch the full APIs.guru index
+          curl -fsSL "https://api.apis.guru/v2/list.json" -o /tmp/apisguru.json
+          echo "APIs.guru index fetched: $(jq 'length' /tmp/apisguru.json) APIs"
+
+          # Build apiroutes.ks from APIs.guru OpenAPI specs
+          echo "Compiling apiroutes wordlist from OpenAPI corpus..."
+          python3 - <<'PYEOF'
+          import json, subprocess, tempfile, os, sys
+
+          with open("/tmp/apisguru.json") as f:
+              apis = json.load(f)
+
+          routes = []
+          processed = 0
+          errors = 0
+          limit = 500  # cap for CI time budget
+
+          for name, api_data in list(apis.items())[:limit]:
+              for version, version_data in api_data.get("versions", {}).items():
+                  spec_url = version_data.get("swaggerUrl") or version_data.get("openApiUrl")
+                  if not spec_url:
+                      continue
+                  try:
+                      result = subprocess.run(
+                          ["./bin/ks", "wordlist", "openapi", "fetch",
+                           "--url", spec_url, "--output", f"/tmp/ks_{processed}.ks"],
+                          capture_output=True, text=True, timeout=30
+                      )
+                      if result.returncode == 0:
+                          routes.append(f"/tmp/ks_{processed}.ks")
+                          processed += 1
+                  except Exception:
+                      errors += 1
+                  break  # one version per API
+
+          print(f"Compiled {processed} specs ({errors} errors)", file=sys.stderr)
+          PYEOF
+
+          echo "Wordlist compilation complete."
+
+      - name: Compute checksums and update manifest
+        run: |
+          python3 - <<'EOF'
+          import json, hashlib, os, datetime
+
+          manifest_path = "wordlists/manifest.json"
+          with open(manifest_path) as f:
+              m = json.load(f)
+
+          m["updated_at"] = datetime.date.today().isoformat()
+
+          with open(manifest_path, "w") as f:
+              json.dump(m, f, indent=2)
+              f.write("\n")
+
+          print("Manifest updated.")
+          EOF
+
+      - name: Upload wordlists to wordlists-latest release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Ensure the wordlists-latest release exists
+          gh release view wordlists-latest >/dev/null 2>&1 || \
+            gh release create wordlists-latest \
+              --title "Wordlists (latest)" \
+              --notes "Curated KiteString wordlists. Auto-updated monthly." \
+              --latest=false
+
+          # Upload the manifest
+          gh release upload wordlists-latest wordlists/manifest.json --clobber
+
+          # Upload any compiled .ks files
+          if ls dist/wordlists/*.ks 2>/dev/null | head -1 | grep -q .; then
+            gh release upload wordlists-latest dist/wordlists/*.ks --clobber
+          fi
+
+      - name: Commit manifest update
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add wordlists/manifest.json
+          if git diff --staged --quiet; then
+            echo "No manifest changes to commit."
+          else
+            git commit -m "chore(wordlists): update manifest $(date -u +%Y-%m-%d)"
+            git push origin HEAD:main
+          fi

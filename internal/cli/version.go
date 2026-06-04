@@ -7,10 +7,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version, BuildDate, and Commit are set at build time via -ldflags.
+// Version, BuildDate, Commit, and BuiltBy are set at build time via -ldflags.
 var Version = "dev"
 var BuildDate = "unknown"
 var Commit = "unknown"
+var BuiltBy = "source"
 
 var versionVerbose bool
 
@@ -31,6 +32,7 @@ Examples:
 			fmt.Printf("go:         %s\n", runtime.Version())
 			fmt.Printf("build date: %s\n", BuildDate)
 			fmt.Printf("commit:     %s\n", Commit)
+			fmt.Printf("built by:   %s\n", BuiltBy)
 			fmt.Printf("platform:   %s/%s\n", runtime.GOOS, runtime.GOARCH)
 		} else {
 			fmt.Printf("kitestring %s\n", Version)
