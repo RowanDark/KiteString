@@ -19,7 +19,7 @@ func NewProxyClient(proxyURL string, tlsSkipVerify bool) (*nethttp.Client, error
 		return nil, fmt.Errorf("parse proxy URL: %w", err)
 	}
 
-	tlsCfg := &tls.Config{ //nolint:gosec
+	tlsCfg := &tls.Config{ //nolint:gosec // InsecureSkipVerify is required for interception proxies like Burp Suite
 		InsecureSkipVerify: tlsSkipVerify,
 	}
 

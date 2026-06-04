@@ -13,8 +13,8 @@ import (
 
 var (
 	// REST path patterns matched from string literals.
-	reRESTAPIv  = regexp.MustCompile(`["'` + "`" + `](/api/v[0-9]+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
-	reRESTv     = regexp.MustCompile(`["'` + "`" + `](/v[0-9]+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
+	reRESTAPIv  = regexp.MustCompile(`["'` + "`" + `](/api/v\d+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
+	reRESTv     = regexp.MustCompile(`["'` + "`" + `](/v\d+/[a-z][a-z0-9/_-]*)["'` + "`" + `]`)
 	reAPIBase   = regexp.MustCompile(`["'` + "`" + `]((?:/api|/rest|/service|/_api)/[a-zA-Z0-9/_-]+)["'` + "`" + `]`)
 	reGraphQL   = regexp.MustCompile(`["'` + "`" + `](/(?:graphql|gql)(?:/[a-zA-Z0-9/_-]*)?)["'` + "`" + `]`)
 
@@ -52,7 +52,7 @@ var (
 // ExtractFromURL fetches a JS file at jsURL and extracts API routes.
 // Each returned route has its Source field set to "js:<jsURL>".
 func ExtractFromURL(jsURL string, client *http.Client) ([]proute.Route, error) {
-	resp, err := client.Get(jsURL) //nolint:noctx
+	resp, err := client.Get(jsURL) //nolint:noctx // caller provides a pre-configured client; context threading is handled at the call site
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", jsURL, err)
 	}
@@ -167,7 +167,7 @@ func ExtractFromBody(body string) ([]proute.Route, error) {
 
 // FindScriptURLs parses an HTML page body and returns absolute URLs for all
 // <script src="..."> tags, resolved against baseURL.
-func FindScriptURLs(pageBody string, baseURL string) ([]string, error) {
+func FindScriptURLs(pageBody, baseURL string) ([]string, error) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse base URL %q: %w", baseURL, err)
@@ -305,7 +305,7 @@ func findLinkedPages(pageBody, pageURL string, target proute.ScanTarget) []strin
 
 // fetchBody performs a GET request and returns the response body as a string.
 func fetchBody(rawURL string, client *http.Client) (string, error) {
-	resp, err := client.Get(rawURL) //nolint:noctx
+	resp, err := client.Get(rawURL) //nolint:noctx // caller provides a pre-configured client; context threading is handled at the call site
 	if err != nil {
 		return "", err
 	}

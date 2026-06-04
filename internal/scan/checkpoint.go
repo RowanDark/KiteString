@@ -123,7 +123,7 @@ func (c *Checkpoint) Save(path string) error {
 		return fmt.Errorf("checkpoint write temp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp) //nolint:errcheck
+		os.Remove(tmp) //nolint:errcheck // best-effort cleanup; the rename error is already being returned
 		return fmt.Errorf("checkpoint rename: %w", err)
 	}
 	return nil

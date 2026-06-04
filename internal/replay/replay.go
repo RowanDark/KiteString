@@ -229,7 +229,7 @@ func buildRequest(method, rawURL string, headers map[string]string, body []byte)
 	if len(body) > 0 {
 		req, err = nethttp.NewRequest(method, rawURL, bytes.NewReader(body))
 	} else {
-		req, err = nethttp.NewRequest(method, rawURL, nil)
+		req, err = nethttp.NewRequest(method, rawURL, nethttp.NoBody)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

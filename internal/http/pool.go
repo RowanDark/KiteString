@@ -153,7 +153,7 @@ func (p *Pool) worker() {
 			default:
 			}
 			// Drain remaining jobs without executing them so close(p.jobs) unblocks.
-			for range p.jobs { //nolint:revive
+			for range p.jobs { //nolint:revive // drain remaining jobs without processing so the channel can be closed
 			}
 			return
 		}

@@ -41,7 +41,7 @@ func NewClient(cfg ClientConfig) *Client {
 
 	transport := &nethttp.Transport{
 		MaxIdleConnsPerHost: cfg.MaxIdleConnsPerHost,
-		TLSClientConfig: &tls.Config{ //nolint:gosec
+		TLSClientConfig: &tls.Config{ //nolint:gosec // InsecureSkipVerify is intentionally configurable for user-supplied targets
 			InsecureSkipVerify: cfg.SkipTLSVerify,
 		},
 	}
