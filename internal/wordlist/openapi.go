@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/RowanDark/kitestring/pkg/proute"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/RowanDark/kitestring/pkg/proute"
 )
 
 // OpenAPIHTTPClient is used for all OpenAPI fetch requests; override in tests.
@@ -546,7 +547,7 @@ func mapField(m map[string]interface{}, key string) (map[string]interface{}, boo
 	return toMap(v)
 }
 
-func boolField(m map[string]interface{}, key string) (value bool, ok bool) {
+func boolField(m map[string]interface{}, key string) (value, ok bool) {
 	v, found := m[key]
 	if !found {
 		return false, false

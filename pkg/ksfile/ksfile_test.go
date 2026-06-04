@@ -6,8 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/RowanDark/kitestring/pkg/proute"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/RowanDark/kitestring/pkg/proute"
 )
 
 func sampleRoutes(n int) []proute.Route {
